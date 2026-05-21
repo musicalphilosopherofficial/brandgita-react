@@ -46,40 +46,20 @@
       position: relative;
       overflow: hidden;
     }
-    .btn:hover {
-      background: #2e2e2b;
-      box-shadow: 0 4px 14px rgba(26,26,24,0.28);
-    }
+    .btn:hover { background: #2e2e2b; box-shadow: 0 4px 14px rgba(26,26,24,0.28); }
     .btn:active, .btn.pressed {
       transform: scale(0.94);
       background: #3d3d39;
       box-shadow: 0 1px 4px rgba(26,26,24,0.12);
     }
-    .btn.loading {
-      pointer-events: none;
-      opacity: 0.85;
-    }
+    .btn.loading { pointer-events: none; opacity: 0.85; }
     .btn .label { display: inline-block; }
-    .btn .dots {
-      display: none;
-      letter-spacing: 0.15em;
-      animation: ellipsis 1.2s steps(4, end) infinite;
-    }
+    .btn .dots { display: none; }
     .btn.loading .label { display: none; }
     .btn.loading .dots { display: inline-block; }
-    @keyframes ellipsis {
-      0%   { content: ''; }
-      25%  { content: '.'; }
-      50%  { content: '..'; }
-      75%  { content: '...'; }
-      100% { content: ''; }
-    }
-    @keyframes ripple {
-      to { transform: scale(4); opacity: 0; }
-    }
+    @keyframes ripple { to { transform: scale(4); opacity: 0; } }
     .ripple {
-      position: absolute;
-      border-radius: 50%;
+      position: absolute; border-radius: 50%;
       background: rgba(235,231,219,0.35);
       width: 40px; height: 40px;
       transform: scale(0);
@@ -91,22 +71,24 @@
 <body>
   <div class="card">
     <div class="wordmark">Brand Gita</div>
-    <h1>Instagram connected.</h1>
-    <p>Click below to return to the app.</p>
-    <a class="btn" id="open-btn" href="#"><span class="label">Open Brand Gita</span><span class="dots">Opening</span></a>
+    <h1 id="title">Instagram connected.</h1>
+    <p id="subtitle">Click below to return to the app.</p>
+    <button class="btn" id="open-btn"><span class="label">Open Brand Gita</span><span class="dots">Opening…</span></button>
   </div>
   <script>
     (function () {
-      var p = new URLSearchParams(window.location.search);
+      var p     = new URLSearchParams(window.location.search);
       var code  = p.get('code');
       var error = p.get('error');
+      var state = {};
+      try { state = JSON.parse(p.get('state') || '{}'); } catch (_) {}
+      var port  = state.port || 9878;
+
       if (!code && !error) return;
 
-      var uri = code
-        ? 'brandgita://oauth/instagram?code='  + encodeURIComponent(code)
-        : 'brandgita://oauth/instagram?error=' + encodeURIComponent(error);
-
-      var btn = document.getElementById('open-btn');
+      var btn      = document.getElementById('open-btn');
+      var title    = document.getElementById('title');
+      var subtitle = document.getElementById('subtitle');
 
       btn.addEventListener('mousedown', function (e) {
         var r = document.createElement('span');
@@ -118,15 +100,39 @@
         r.addEventListener('animationend', function () { r.remove(); });
       });
 
-      btn.href = uri;  // real anchor href — Chrome treats this the same as VS Code's vscode:// links
       btn.onclick = function () {
         btn.classList.add('pressed', 'loading');
+        var url = 'http://127.0.0.1:' + port + '/?' + (code
+          ? 'code=' + encodeURIComponent(code)
+          : 'error=' + encodeURIComponent(error));
+        fetch(url)
+          .then(function () {
+            title.textContent = 'All done.';
+            subtitle.textContent = 'You can close this tab and return to Brand Gita.';
+            btn.style.display = 'none';
+          })
+          .catch(function () {
+            btn.classList.remove('loading');
+            title.textContent = 'App not found.';
+            subtitle.textContent = 'Make sure Brand Gita is open, then try again.';
+          });
       };
 
-      // auto-open only works if the user landed here via a direct link; timer-based
-      // navigation loses the gesture context in Chrome and gets silently blocked,
-      // so we skip it and rely on the button only.
-      // setTimeout(function () { window.location.href = uri; }, 500);
+      // Auto-send without user interaction — works because fetch doesn't need a gesture
+      (function autoSend() {
+        var url = 'http://127.0.0.1:' + port + '/?' + (code
+          ? 'code=' + encodeURIComponent(code)
+          : 'error=' + encodeURIComponent(error));
+        fetch(url)
+          .then(function () {
+            title.textContent = 'All done.';
+            subtitle.textContent = 'You can close this tab and return to Brand Gita.';
+            btn.style.display = 'none';
+          })
+          .catch(function () {
+            // App not running or fetch failed — show button as fallback
+          });
+      })();
     })();
   </script>
 </body>
