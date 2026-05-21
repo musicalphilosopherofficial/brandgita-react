@@ -19,10 +19,7 @@
       min-height: 100vh;
       padding: 2rem;
     }
-    .card {
-      text-align: center;
-      max-width: 380px;
-    }
+    .card { text-align: center; max-width: 380px; }
     .wordmark {
       font-size: 13px;
       font-weight: 700;
@@ -31,30 +28,55 @@
       color: #1A1A18;
       margin-bottom: 2rem;
     }
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-      margin-bottom: 0.75rem;
-    }
-    p {
+    h1 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.75rem; }
+    p { font-size: 0.9375rem; color: #5A5A52; margin-bottom: 1.5rem; }
+    .btn {
+      display: inline-block;
+      padding: 0.65rem 1.5rem;
+      background: #1A1A18;
+      color: #EBE7DB;
+      border-radius: 6px;
       font-size: 0.9375rem;
-      color: #5A5A52;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
     }
+    #fallback { display: none; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="wordmark">Brand Gita</div>
     <h1>Instagram connected.</h1>
-    <p>You can close this window and return to the app.</p>
+    <p>Returning you to the app…</p>
+    <div id="fallback">
+      <p>If the app didn't open automatically:</p>
+      <button class="btn" id="open-btn">Open Brand Gita</button>
+    </div>
   </div>
   <script>
     (function () {
       var p = new URLSearchParams(window.location.search);
       var code  = p.get('code');
       var error = p.get('error');
-      if (code)  window.location.href = 'brandgita://oauth/instagram?code='  + encodeURIComponent(code);
-      if (error) window.location.href = 'brandgita://oauth/instagram?error=' + encodeURIComponent(error);
+      if (!code && !error) return;
+
+      var uri = code
+        ? 'brandgita://oauth/instagram?code='  + encodeURIComponent(code)
+        : 'brandgita://oauth/instagram?error=' + encodeURIComponent(error);
+
+      // Attempt auto-redirect
+      window.location.href = uri;
+
+      // Show fallback button after 1.5s in case browser blocked it
+      setTimeout(function () {
+        var fb = document.getElementById('fallback');
+        if (fb) fb.style.display = 'block';
+        document.getElementById('open-btn').onclick = function () {
+          window.location.href = uri;
+        };
+      }, 1500);
     })();
   </script>
 </body>
