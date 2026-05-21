@@ -93,7 +93,7 @@
     <div class="wordmark">Brand Gita</div>
     <h1>Instagram connected.</h1>
     <p>Click below to return to the app.</p>
-    <button class="btn" id="open-btn"><span class="label">Open Brand Gita</span><span class="dots">Opening</span></button>
+    <a class="btn" id="open-btn" href="#"><span class="label">Open Brand Gita</span><span class="dots">Opening</span></a>
   </div>
   <script>
     (function () {
@@ -118,9 +118,9 @@
         r.addEventListener('animationend', function () { r.remove(); });
       });
 
+      btn.href = uri;  // real anchor href — Chrome treats this the same as VS Code's vscode:// links
       btn.onclick = function () {
         btn.classList.add('pressed', 'loading');
-        window.location.href = uri;  // must be synchronous — timeout breaks user-gesture context
       };
 
       // auto-open only works if the user landed here via a direct link; timer-based
