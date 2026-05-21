@@ -42,18 +42,14 @@
       cursor: pointer;
       border: none;
     }
-    #fallback { display: none; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="wordmark">Brand Gita</div>
     <h1>Instagram connected.</h1>
-    <p>Returning you to the app…</p>
-    <div id="fallback">
-      <p>If the app didn't open automatically:</p>
-      <button class="btn" id="open-btn">Open Brand Gita</button>
-    </div>
+    <p>Click below to return to the app.</p>
+    <button class="btn" id="open-btn">Open Brand Gita</button>
   </div>
   <script>
     (function () {
@@ -66,17 +62,12 @@
         ? 'brandgita://oauth/instagram?code='  + encodeURIComponent(code)
         : 'brandgita://oauth/instagram?error=' + encodeURIComponent(error);
 
-      // Attempt auto-redirect
-      window.location.href = uri;
+      document.getElementById('open-btn').onclick = function () {
+        window.location.href = uri;
+      };
 
-      // Show fallback button after 1.5s in case browser blocked it
-      setTimeout(function () {
-        var fb = document.getElementById('fallback');
-        if (fb) fb.style.display = 'block';
-        document.getElementById('open-btn').onclick = function () {
-          window.location.href = uri;
-        };
-      }, 1500);
+      // Also attempt auto-open after short delay
+      setTimeout(function () { window.location.href = uri; }, 500);
     })();
   </script>
 </body>
