@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connected — Brand Gita</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      font-weight: 300;
+      color: #1A1A18;
+      background: #EBE7DB;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .card {
+      text-align: center;
+      max-width: 380px;
+    }
+    .wordmark {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #1A1A18;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+    p {
+      font-size: 0.9375rem;
+      color: #5A5A52;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="wordmark">Brand Gita</div>
+    <h1>Instagram connected.</h1>
+    <p>You can close this window and return to the app.</p>
+  </div>
+  <script>
+    (function () {
+      var p = new URLSearchParams(window.location.search);
+      var code  = p.get('code');
+      var error = p.get('error');
+      if (code)  window.location.href = 'brandgita://oauth/instagram?code='  + encodeURIComponent(code);
+      if (error) window.location.href = 'brandgita://oauth/instagram?error=' + encodeURIComponent(error);
+    })();
+  </script>
+</body>
+</html>
