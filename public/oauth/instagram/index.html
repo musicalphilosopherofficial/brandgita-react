@@ -120,11 +120,13 @@
 
       btn.onclick = function () {
         btn.classList.add('pressed', 'loading');
-        setTimeout(function () { window.location.href = uri; }, 120);
+        window.location.href = uri;  // must be synchronous — timeout breaks user-gesture context
       };
 
-      // Also attempt auto-open after short delay
-      setTimeout(function () { window.location.href = uri; }, 500);
+      // auto-open only works if the user landed here via a direct link; timer-based
+      // navigation loses the gesture context in Chrome and gets silently blocked,
+      // so we skip it and rely on the button only.
+      // setTimeout(function () { window.location.href = uri; }, 500);
     })();
   </script>
 </body>
