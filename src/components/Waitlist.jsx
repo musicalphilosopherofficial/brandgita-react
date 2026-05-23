@@ -96,23 +96,26 @@ function StepLabel({ text }) {
 
 export default function Waitlist() {
   const [os, setOs] = useState(null)          // 'mac' | 'windows'
-  const [chip, setChip] = useState(null)      // 'apple-silicon' | 'intel'
-  const [gpu, setGpu] = useState(null)        // 'nvidia' | 'cpu'
+  const [gpu, setGpu] = useState(null)        // 'nvidia' | 'amd-no-gpu'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle') // 'idle' | 'loading' | 'success' | 'error'
   const [errorMsg, setErrorMsg] = useState('')
 
   function getHardwareValue() {
-    if (os === 'mac') return chip === 'apple-silicon' ? 'mac-apple-silicon' : chip === 'intel' ? 'mac-intel' : null
-    if (os === 'windows') return gpu === 'nvidia' ? 'windows-nvidia' : gpu === 'cpu' ? 'windows-cpu' : null
+    if (os === 'mac') return 'mac-apple-silicon'
+    if (os === 'windows') return gpu === 'nvidia' ? 'windows-nvidia' : null
     return null
   }
 
+  // Unsupported: Intel Mac selected or Windows AMD/no-GPU selected
+  const unsupported =
+    (os === 'windows' && gpu === 'amd-no-gpu')
+
   // Determine if the form is ready to show the email step
   const hardwareComplete =
-    (os === 'mac' && chip !== null) ||
-    (os === 'windows' && gpu !== null)
+    (os === 'mac') ||
+    (os === 'windows' && gpu === 'nvidia')
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -217,55 +220,51 @@ export default function Waitlist() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
               <RadioCard
                 label="Mac"
+                sublabel="Apple Silicon — M1, M2, M3, or M4"
                 selected={os === 'mac'}
                 onClick={() => { setOs('mac'); setGpu(null) }}
               />
               <RadioCard
                 label="Windows"
                 selected={os === 'windows'}
-                onClick={() => { setOs('windows'); setChip(null) }}
+                onClick={() => { setOs('windows'); setGpu(null) }}
               />
             </div>
           </div>
 
-          {/* Step 2a: Mac chip */}
-          {os === 'mac' && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <StepLabel text="Your chip" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                <RadioCard
-                  label="Apple Silicon"
-                  sublabel="M1, M2, M3, or M4"
-                  selected={chip === 'apple-silicon'}
-                  onClick={() => setChip('apple-silicon')}
-                />
-                <RadioCard
-                  label="Intel Mac"
-                  selected={chip === 'intel'}
-                  onClick={() => setChip('intel')}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Step 2b: Windows GPU */}
+          {/* Step 2: Windows GPU */}
           {os === 'windows' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Your GPU" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
-                  label="NVIDIA GPU"
-                  sublabel="RTX / GTX series"
+                  label="NVIDIA RTX / GTX"
+                  sublabel="RTX 30, 40, or 50 series · GTX 1660 or newer (2019+)"
                   selected={gpu === 'nvidia'}
                   onClick={() => setGpu('nvidia')}
                 />
                 <RadioCard
-                  label="No dedicated GPU"
-                  sublabel="Integrated graphics or AMD"
-                  selected={gpu === 'cpu'}
-                  onClick={() => setGpu('cpu')}
+                  label="AMD GPU or no dedicated GPU"
+                  sublabel="Integrated graphics, AMD Radeon, or CPU-only"
+                  selected={gpu === 'amd-no-gpu'}
+                  onClick={() => setGpu('amd-no-gpu')}
                 />
               </div>
+              {unsupported && (
+                <p style={{
+                  marginTop: '1rem',
+                  fontSize: '0.875rem',
+                  color: '#7A6F63',
+                  lineHeight: 1.6,
+                  background: '#F2EFE9',
+                  border: '1px solid #D4CFC4',
+                  borderRadius: 8,
+                  padding: '0.75rem 1rem',
+                }}>
+                  Brand Gita requires an NVIDIA GPU for hardware video encoding on Windows. AMD-only and integrated graphics aren&rsquo;t supported in the beta.
+                  We&rsquo;ll open AMD support in a future release — check back then.
+                </p>
+              )}
             </div>
           )}
 
