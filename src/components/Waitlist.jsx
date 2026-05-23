@@ -273,8 +273,9 @@ export default function Waitlist() {
               <StepLabel text="Your Mac" />
               <HowToCheck steps={[
                 '① Click the Apple  menu (top-left) → About This Mac.',
-                '② Look for the "Chip" line. If it says M1, M2, M3, or M4 — that\'s Apple Silicon and you\'re compatible.',
-                '③ If it says "Intel Core" instead, select Intel Mac below.',
+                '② Look for the "Chip" line. If it says M1, M2, M3, or M4 — you\'re compatible.',
+                '③ If it says "Intel Core" → Intel Macs are not supported. Brand Gita requires Apple Silicon.',
+                '④ Mac Neo (budget range) is also not supported — it doesn\'t have enough processing power for local video rendering.',
               ]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
