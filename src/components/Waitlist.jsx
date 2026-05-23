@@ -154,9 +154,15 @@ function HowToCheck({ steps }) {
 }
 
 export default function Waitlist() {
-  const [os, setOs] = useState(null)       // 'mac' | 'windows'
-  const [mac, setMac] = useState(null)     // 'pro' | 'neo' | 'intel'
+  const [role, setRole] = useState(null)       // 'coach' | 'educator' | 'entrepreneur' | 'none'
+  const [platform, setPlatform] = useState(null) // 'youtube' | 'instagram' | 'both' | 'starting'
+  const [monetise, setMonetise] = useState(null) // 'courses' | 'coaching' | 'community' | 'building'
+  const [os, setOs] = useState(null)             // 'mac' | 'windows'
+  const [mac, setMac] = useState(null)           // 'pro' | 'neo' | 'intel'
   const [winSetup, setWinSetup] = useState(null) // 'intel-nvidia' | 'amd-nvidia' | 'intel-qsv' | 'amd-unsupported'
+
+  const icpRejected = role === 'none'
+  const icpComplete = role !== null && !icpRejected && platform !== null && monetise !== null
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
@@ -184,7 +190,7 @@ export default function Waitlist() {
       const res = await fetch('/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name: name.trim() || undefined, hardware }),
+        body: JSON.stringify({ email, name: name.trim() || undefined, hardware, role, platform, monetise }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -244,9 +250,124 @@ export default function Waitlist() {
       <div style={containerStyle}>
         <form onSubmit={handleSubmit} noValidate>
 
-          {/* Step 1: OS */}
+          {/* Step 1: Role */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <StepLabel text="Your operating system" />
+            <StepLabel text="What best describes you?" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              <RadioCard
+                label="Coach or consultant"
+                sublabel="1:1 or group coaching, consulting services"
+                selected={role === 'coach'}
+                status={null}
+                onClick={() => setRole('coach')}
+              />
+              <RadioCard
+                label="Educator or course creator"
+                sublabel="Online courses, tutorials, teaching content"
+                selected={role === 'educator'}
+                status={null}
+                onClick={() => setRole('educator')}
+              />
+              <RadioCard
+                label="Entrepreneur or founder"
+                sublabel="Building a business around your personal brand"
+                selected={role === 'entrepreneur'}
+                status={null}
+                onClick={() => setRole('entrepreneur')}
+              />
+              <RadioCard
+                label="None of these"
+                sublabel="I don't create content around my expertise"
+                selected={role === 'none'}
+                status={role === 'none' ? 'rejected' : null}
+                onClick={() => setRole('none')}
+              />
+            </div>
+            {icpRejected && (
+              <p style={rejectedMsgStyle}>
+                Brand Gita is built specifically for coaches, educators, and entrepreneurs who show up on camera to share their expertise. It might not be the right fit right now — but if that changes, come back and apply.
+              </p>
+            )}
+          </div>
+
+          {/* Step 2: Platform */}
+          {role !== null && !icpRejected && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <StepLabel text="Where do you share your expertise?" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                <RadioCard
+                  label="YouTube"
+                  sublabel="Long-form video — tutorials, vlogs, interviews"
+                  selected={platform === 'youtube'}
+                  status={null}
+                  onClick={() => setPlatform('youtube')}
+                />
+                <RadioCard
+                  label="Instagram"
+                  sublabel="Reels, carousels, stories"
+                  selected={platform === 'instagram'}
+                  status={null}
+                  onClick={() => setPlatform('instagram')}
+                />
+                <RadioCard
+                  label="Both YouTube and Instagram"
+                  sublabel="Multi-platform — repurposing long-form into short-form"
+                  selected={platform === 'both'}
+                  status={null}
+                  onClick={() => setPlatform('both')}
+                />
+                <RadioCard
+                  label="Just getting started"
+                  sublabel="Building toward publishing video content"
+                  selected={platform === 'starting'}
+                  status={null}
+                  onClick={() => setPlatform('starting')}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Monetisation */}
+          {role !== null && !icpRejected && platform !== null && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <StepLabel text="How do you monetise your expertise?" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                <RadioCard
+                  label="Courses or digital products"
+                  sublabel="Online courses, templates, digital downloads"
+                  selected={monetise === 'courses'}
+                  status={null}
+                  onClick={() => setMonetise('courses')}
+                />
+                <RadioCard
+                  label="Coaching or consulting"
+                  sublabel="1:1 sessions, group programmes, retainers"
+                  selected={monetise === 'coaching'}
+                  status={null}
+                  onClick={() => setMonetise('coaching')}
+                />
+                <RadioCard
+                  label="Community or membership"
+                  sublabel="Paid community, membership site, subscription"
+                  selected={monetise === 'community'}
+                  status={null}
+                  onClick={() => setMonetise('community')}
+                />
+                <RadioCard
+                  label="Still building toward it"
+                  sublabel="Growing my audience before monetising"
+                  selected={monetise === 'building'}
+                  status={null}
+                  onClick={() => setMonetise('building')}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: OS — only shown after ICP complete */}
+          {icpComplete && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <StepLabel text="Your operating system" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
               <RadioCard
                 label="Mac"
@@ -262,9 +383,10 @@ export default function Waitlist() {
               />
             </div>
           </div>
+          )} {/* end icpComplete */}
 
-          {/* Step 2: Mac model */}
-          {os === 'mac' && (
+          {/* Step 5: Mac model */}
+          {icpComplete && os === 'mac' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Your Mac" />
               <HowToCheck steps={[
@@ -309,8 +431,8 @@ export default function Waitlist() {
             </div>
           )}
 
-          {/* Step 3: Windows setup (CPU + GPU combined) */}
-          {os === 'windows' && (
+          {/* Step 6: Windows setup (CPU + GPU combined) */}
+          {icpComplete && os === 'windows' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Your setup" />
               <HowToCheck steps={[

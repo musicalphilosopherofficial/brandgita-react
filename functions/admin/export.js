@@ -14,13 +14,13 @@ export async function onRequest(context) {
   }
 
   const { results } = await env.DB.prepare(
-    `SELECT id, email, name, hardware, created_at FROM waitlist ORDER BY created_at DESC`
+    `SELECT id, email, name, role, platform, monetise, hardware, created_at FROM waitlist ORDER BY created_at DESC`
   ).all();
 
-  const header = 'id,email,name,hardware,created_at\n';
+  const header = 'id,email,name,role,platform,monetise,hardware,created_at\n';
   const rows = results
     .map(r =>
-      [r.id, r.email, r.name ?? '', r.hardware ?? '', r.created_at]
+      [r.id, r.email, r.name ?? '', r.role ?? '', r.platform ?? '', r.monetise ?? '', r.hardware ?? '', r.created_at]
         .map(v => `"${String(v).replace(/"/g, '""')}"`)
         .join(',')
     )

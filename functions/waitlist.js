@@ -29,7 +29,7 @@ export async function onRequest(context) {
     return json({ error: 'Invalid JSON' }, 400);
   }
 
-  const { email, name, hardware } = body;
+  const { email, name, hardware, role, platform, monetise } = body;
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return json({ error: 'Valid email is required' }, 400);
@@ -37,12 +37,15 @@ export async function onRequest(context) {
 
   try {
     await env.DB.prepare(
-      `INSERT INTO waitlist (email, name, hardware) VALUES (?, ?, ?)`
+      `INSERT INTO waitlist (email, name, hardware, role, platform, monetise) VALUES (?, ?, ?, ?, ?, ?)`
     )
       .bind(
         email.toLowerCase().trim(),
         name ? name.trim() : null,
-        hardware || null
+        hardware || null,
+        role || null,
+        platform || null,
+        monetise || null
       )
       .run();
   } catch (err) {
