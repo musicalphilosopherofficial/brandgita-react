@@ -90,6 +90,10 @@ export async function onRequest(context) {
 
   const { email, name, hardware, role, platform, monetise } = body;
 
+  if (!name || !name.trim()) {
+    return json({ error: 'First name is required' }, 400);
+  }
+
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return json({ error: 'Valid email is required' }, 400);
   }

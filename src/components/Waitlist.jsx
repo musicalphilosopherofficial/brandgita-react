@@ -491,9 +491,10 @@ export default function Waitlist() {
 
               <input
                 type="text"
-                placeholder="First name (optional)"
+                placeholder="First name"
                 value={name}
                 onChange={e => setName(e.target.value)}
+                required
                 style={inputStyle}
                 autoComplete="given-name"
               />
@@ -516,11 +517,11 @@ export default function Waitlist() {
 
               <button
                 type="submit"
-                disabled={!email || status === 'loading'}
+                disabled={!email || !name.trim() || status === 'loading'}
                 style={{
                   ...submitButtonStyle,
-                  opacity: (!email || status === 'loading') ? 0.55 : 1,
-                  cursor: (!email || status === 'loading') ? 'not-allowed' : 'pointer',
+                  opacity: (!email || !name.trim() || status === 'loading') ? 0.55 : 1,
+                  cursor: (!email || !name.trim() || status === 'loading') ? 'not-allowed' : 'pointer',
                 }}
               >
                 {status === 'loading' ? (
