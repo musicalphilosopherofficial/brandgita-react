@@ -154,10 +154,9 @@ function HowToCheck({ steps }) {
 }
 
 export default function Waitlist() {
-  const [os, setOs] = useState(null)     // 'mac' | 'windows'
-  const [mac, setMac] = useState(null)   // 'pro' | 'neo' | 'intel'
-  const [cpu, setCpu] = useState(null)   // 'intel' | 'amd'
-  const [gpu, setGpu] = useState(null)   // 'nvidia' | 'intel-igpu' | 'amd'
+  const [os, setOs] = useState(null)       // 'mac' | 'windows'
+  const [mac, setMac] = useState(null)     // 'pro' | 'neo' | 'intel'
+  const [winSetup, setWinSetup] = useState(null) // 'intel-nvidia' | 'amd-nvidia' | 'intel-qsv' | 'amd-unsupported'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
@@ -165,18 +164,15 @@ export default function Waitlist() {
 
   function getHardwareValue() {
     if (os === 'mac' && mac === 'pro') return 'mac-apple-silicon'
-    if (os === 'windows' && cpu === 'intel' && gpu === 'nvidia') return 'windows-intel-nvidia'
-    if (os === 'windows' && cpu === 'intel' && gpu === 'intel-igpu') return 'windows-intel-qsv'
-    if (os === 'windows' && cpu === 'amd' && gpu === 'nvidia') return 'windows-amd-nvidia'
+    if (os === 'windows' && winSetup === 'intel-nvidia') return 'windows-intel-nvidia'
+    if (os === 'windows' && winSetup === 'intel-qsv') return 'windows-intel-qsv'
+    if (os === 'windows' && winSetup === 'amd-nvidia') return 'windows-amd-nvidia'
     return null
   }
 
-  const gpuSupported = gpu === 'nvidia' || (gpu === 'intel-igpu' && cpu === 'intel')
-  const gpuStatus = gpuSupported ? 'accepted' : gpu === 'amd' ? 'rejected' : null
-
   const hardwareComplete =
     (os === 'mac' && mac === 'pro') ||
-    (os === 'windows' && cpu !== null && gpuSupported)
+    (os === 'windows' && winSetup !== null && winSetup !== 'amd-unsupported')
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -256,13 +252,13 @@ export default function Waitlist() {
                 label="Mac"
                 selected={os === 'mac'}
                 status={null}
-                onClick={() => { setOs('mac'); setMac(null); setCpu(null); setGpu(null) }}
+                onClick={() => { setOs('mac'); setMac(null); setWinSetup(null) }}
               />
               <RadioCard
                 label="Windows"
                 selected={os === 'windows'}
                 status={null}
-                onClick={() => { setOs('windows'); setMac(null); setCpu(null); setGpu(null) }}
+                onClick={() => { setOs('windows'); setMac(null); setWinSetup(null) }}
               />
             </div>
           </div>
@@ -313,77 +309,48 @@ export default function Waitlist() {
             </div>
           )}
 
-          {/* Step 3: Windows CPU */}
+          {/* Step 3: Windows setup (CPU + GPU combined) */}
           {os === 'windows' && (
             <div style={{ marginBottom: '1.5rem' }}>
-              <StepLabel text="Your processor" />
+              <StepLabel text="Your setup" />
               <HowToCheck steps={[
-                '① Press the Windows key + Pause/Break — or go to Settings → System → About. Look for the "Processor" line.',
-                '② If it says "Intel Core i5 / i7 / i9" → select Intel below. If it says "AMD Ryzen 5 / 7 / 9" → select AMD.',
-                '③ Intel — i5, i7, and i9 are performance tiers (i9 > i7 > i5). The generation is the first two digits after the dash: i7-12700H = 12th gen, i7-13700H = 13th gen. 12th gen or newer recommended.',
-                '④ AMD — Ryzen 5, 7, and 9 are also performance tiers (9 > 7 > 5). The series is the first digit of the 4-digit model number: Ryzen 7 5800H = 5000 series, Ryzen 7 7700X = 7000 series. Note: the tier number and series number are unrelated — a Ryzen 7 can be 5000 or 7000 series. 5000 series or newer recommended.',
+                '① Processor: press Windows key + Pause/Break, or go to Settings → System → About. Look for the "Processor" line.',
+                '② Graphics: press Ctrl + Shift + Esc → Task Manager → Performance tab → click GPU. The GPU name shows top-right.',
+                '③ Intel tiers: i5, i7, i9 — higher = more powerful. Generation = first two digits after the dash (i7-12700H = 12th gen). 12th gen or newer recommended.',
+                '④ AMD tiers: Ryzen 5, 7, 9 — higher = more powerful. Series = first digit of the 4-digit model number (Ryzen 7 5800H = 5000 series, Ryzen 7 7700X = 7000 series). 5000 series or newer recommended.',
+                '⑤ No dedicated GPU, or have AMD Radeon with Intel CPU? Select the third option — Brand Gita uses Intel Quick Sync instead.',
               ]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
-                  label="Intel Core i5, i7, or i9"
-                  sublabel="i5 = minimum · i7 or i9 recommended · 12th gen or newer recommended"
-                  selected={cpu === 'intel'}
-                  status={cpu === 'intel' ? 'accepted' : null}
-                  onClick={() => { setCpu('intel'); setGpu(null) }}
+                  label="Intel Core i5, i7, or i9 + NVIDIA RTX"
+                  sublabel="Recommended RTX 3060 or newer · Intel 12th gen or newer recommended"
+                  selected={winSetup === 'intel-nvidia'}
+                  status={winSetup === 'intel-nvidia' ? 'accepted' : null}
+                  onClick={() => setWinSetup('intel-nvidia')}
                 />
                 <RadioCard
-                  label="AMD Ryzen 5, 7, or 9"
-                  sublabel="Ryzen 5 = minimum · Ryzen 7 or 9 recommended · 5000 series or newer recommended"
-                  selected={cpu === 'amd'}
-                  status={cpu === 'amd' ? 'accepted' : null}
-                  onClick={() => { setCpu('amd'); setGpu(null) }}
+                  label="AMD Ryzen 5, 7, or 9 + NVIDIA RTX"
+                  sublabel="Recommended RTX 3060 or newer · Ryzen 5000 series or newer recommended"
+                  selected={winSetup === 'amd-nvidia'}
+                  status={winSetup === 'amd-nvidia' ? 'accepted' : null}
+                  onClick={() => setWinSetup('amd-nvidia')}
+                />
+                <RadioCard
+                  label="Intel Core i5, i7, or i9 — no NVIDIA GPU"
+                  sublabel="No dedicated GPU, or with AMD Radeon — uses Intel Quick Sync (QSV)"
+                  selected={winSetup === 'intel-qsv'}
+                  status={winSetup === 'intel-qsv' ? 'accepted' : null}
+                  onClick={() => setWinSetup('intel-qsv')}
+                />
+                <RadioCard
+                  label="AMD Ryzen — no NVIDIA GPU"
+                  sublabel="AMD Radeon or no dedicated GPU"
+                  selected={winSetup === 'amd-unsupported'}
+                  status={winSetup === 'amd-unsupported' ? 'rejected' : null}
+                  onClick={() => setWinSetup('amd-unsupported')}
                 />
               </div>
-            </div>
-          )}
-
-          {/* Step 4: Windows GPU */}
-          {os === 'windows' && cpu !== null && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <StepLabel text="Your graphics" />
-              <HowToCheck steps={[
-                '① Press Ctrl + Shift + Esc to open Task Manager → click the "Performance" tab → select "GPU".',
-                '② The GPU name will show in the top-right. "NVIDIA GeForce RTX…" → select NVIDIA RTX.',
-                '③ If you see only "Intel UHD Graphics" or "Intel Iris" with no separate GPU listed → select Intel integrated graphics.',
-                '④ "AMD Radeon RX…" → select AMD Radeon (not supported in the current beta).',
-              ]} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                <RadioCard
-                  label="NVIDIA RTX"
-                  sublabel="Minimum RTX 2060 · Recommended RTX 3060 or newer"
-                  selected={gpu === 'nvidia'}
-                  status={gpu === 'nvidia' ? 'accepted' : null}
-                  onClick={() => setGpu('nvidia')}
-                />
-                {cpu === 'intel' && (
-                  <RadioCard
-                    label="Intel integrated graphics"
-                    sublabel="No dedicated GPU — uses Intel Quick Sync (QSV)"
-                    selected={gpu === 'intel-igpu'}
-                    status={gpu === 'intel-igpu' ? 'accepted' : null}
-                    onClick={() => setGpu('intel-igpu')}
-                  />
-                )}
-                <RadioCard
-                  label="AMD Radeon"
-                  sublabel="AMD discrete or integrated graphics"
-                  selected={gpu === 'amd'}
-                  status={gpu === 'amd' ? 'rejected' : null}
-                  onClick={() => setGpu('amd')}
-                />
-              </div>
-              {gpu === 'amd' && cpu === 'intel' && (
-                <p style={rejectedMsgStyle}>
-                  Brand Gita won&rsquo;t use your AMD Radeon — but your Intel processor has Intel Quick Sync built in, which is supported.
-                  Go back and select <strong>Intel integrated graphics</strong> instead.
-                </p>
-              )}
-              {gpu === 'amd' && cpu === 'amd' && (
+              {winSetup === 'amd-unsupported' && (
                 <p style={rejectedMsgStyle}>
                   AMD Radeon isn&rsquo;t supported in the current beta — Brand Gita requires an NVIDIA RTX GPU on AMD Ryzen systems.
                   We&rsquo;ll add AMD GPU support in a future release.
