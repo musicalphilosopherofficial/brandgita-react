@@ -218,7 +218,7 @@ export default function Waitlist() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
               <RadioCard
                 label="Mac"
-                sublabel="Apple Silicon — M1, M2, M3, or M4"
+                sublabel="Apple Silicon M series — minimum MacBook Air"
                 selected={os === 'mac'}
                 onClick={() => { setOs('mac'); setCpu(null); setGpu(null) }}
               />
