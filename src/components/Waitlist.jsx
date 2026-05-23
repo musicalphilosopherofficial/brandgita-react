@@ -377,9 +377,16 @@ export default function Waitlist() {
                   onClick={() => setGpu('amd')}
                 />
               </div>
-              {gpu === 'amd-no-gpu' && (
+              {gpu === 'amd' && cpu === 'intel' && (
                 <p style={rejectedMsgStyle}>
-                  Brand Gita requires an NVIDIA RTX GPU for hardware video encoding on Windows. AMD Radeon and integrated graphics aren&rsquo;t supported in the beta — we&rsquo;ll add AMD support in a future release.
+                  Brand Gita won&rsquo;t use your AMD Radeon — but your Intel processor has Intel Quick Sync built in, which is supported.
+                  Go back and select <strong>Intel integrated graphics</strong> instead.
+                </p>
+              )}
+              {gpu === 'amd' && cpu === 'amd' && (
+                <p style={rejectedMsgStyle}>
+                  AMD Radeon isn&rsquo;t supported in the current beta — Brand Gita requires an NVIDIA RTX GPU on AMD Ryzen systems.
+                  We&rsquo;ll add AMD GPU support in a future release.
                 </p>
               )}
             </div>
