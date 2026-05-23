@@ -98,36 +98,41 @@ export async function onRequest(context) {
     return json({ error: 'Valid email is required' }, 400);
   }
 
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanName = name.trim();
   const token = crypto.randomUUID();
   const score = priorityScore({ role, platform, monetise, hardware });
 
   try {
-    await env.DB.prepare(
-      `INSERT INTO waitlist (email, name, hardware, role, platform, monetise, confirm_token, priority_score)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(
-        email.toLowerCase().trim(),
-        name ? name.trim() : null,
-        hardware || null,
-        role || null,
-        platform || null,
-        monetise || null,
-        token,
-        score
-      )
-      .run();
-  } catch (err) {
-    if (err.message && err.message.includes('UNIQUE')) {
-      return json({ success: true }); // already signed up — no info leak
+    // Check if this email already exists
+    const existing = await env.DB.prepare(
+      `SELECT id, confirmed FROM waitlist WHERE email = ?`
+    ).bind(cleanEmail).first();
+
+    if (existing) {
+      if (existing.confirmed) {
+        // Already confirmed — don't touch, don't re-email
+        return json({ success: true });
+      }
+      // Not yet confirmed — update with new details and fresh token
+      await env.DB.prepare(
+        `UPDATE waitlist SET name=?, hardware=?, role=?, platform=?, monetise=?, confirm_token=?, priority_score=? WHERE id=?`
+      ).bind(cleanName, hardware || null, role || null, platform || null, monetise || null, token, score, existing.id).run();
+    } else {
+      // New signup
+      await env.DB.prepare(
+        `INSERT INTO waitlist (email, name, hardware, role, platform, monetise, confirm_token, priority_score)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(cleanEmail, cleanName, hardware || null, role || null, platform || null, monetise || null, token, score).run();
     }
-    console.error('D1 insert error:', err);
+  } catch (err) {
+    console.error('D1 error:', err);
     return json({ error: 'Could not save. Please try again.' }, 500);
   }
 
-  // Fire confirmation email — non-blocking, failure doesn't affect signup
+  // Fire confirmation email — non-blocking
   context.waitUntil(
-    sendConfirmationEmail(env, { email: email.toLowerCase().trim(), name, token })
+    sendConfirmationEmail(env, { email: cleanEmail, name: cleanName, token })
   );
 
   return json({ success: true });
