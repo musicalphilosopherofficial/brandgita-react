@@ -96,6 +96,7 @@ function StepLabel({ text }) {
 
 export default function Waitlist() {
   const [os, setOs] = useState(null)          // 'mac' | 'windows'
+  const [cpu, setCpu] = useState(null)        // 'intel' | 'amd'
   const [gpu, setGpu] = useState(null)        // 'nvidia' | 'amd-no-gpu'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -104,18 +105,15 @@ export default function Waitlist() {
 
   function getHardwareValue() {
     if (os === 'mac') return 'mac-apple-silicon'
-    if (os === 'windows') return gpu === 'nvidia' ? 'windows-nvidia' : null
+    if (os === 'windows' && cpu && gpu === 'nvidia') return `windows-${cpu}-nvidia`
     return null
   }
 
-  // Unsupported: Intel Mac selected or Windows AMD/no-GPU selected
-  const unsupported =
-    (os === 'windows' && gpu === 'amd-no-gpu')
+  const unsupported = os === 'windows' && gpu === 'amd-no-gpu'
 
-  // Determine if the form is ready to show the email step
   const hardwareComplete =
-    (os === 'mac') ||
-    (os === 'windows' && gpu === 'nvidia')
+    os === 'mac' ||
+    (os === 'windows' && cpu !== null && gpu === 'nvidia')
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -222,29 +220,50 @@ export default function Waitlist() {
                 label="Mac"
                 sublabel="Apple Silicon — M1, M2, M3, or M4"
                 selected={os === 'mac'}
-                onClick={() => { setOs('mac'); setGpu(null) }}
+                onClick={() => { setOs('mac'); setCpu(null); setGpu(null) }}
               />
               <RadioCard
                 label="Windows"
                 selected={os === 'windows'}
-                onClick={() => { setOs('windows'); setGpu(null) }}
+                onClick={() => { setOs('windows'); setCpu(null); setGpu(null) }}
               />
             </div>
           </div>
 
-          {/* Step 2: Windows GPU */}
+          {/* Step 2: Windows CPU */}
           {os === 'windows' && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <StepLabel text="Your processor" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                <RadioCard
+                  label="Intel Core i5 / i7 / i9"
+                  sublabel="Minimum i5 · Recommended i7 12th gen or newer"
+                  selected={cpu === 'intel'}
+                  onClick={() => { setCpu('intel'); setGpu(null) }}
+                />
+                <RadioCard
+                  label="AMD Ryzen"
+                  sublabel="Minimum Ryzen 5 · Recommended Ryzen 7 5000 series or newer"
+                  selected={cpu === 'amd'}
+                  onClick={() => { setCpu('amd'); setGpu(null) }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Windows GPU */}
+          {os === 'windows' && cpu !== null && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Your GPU" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
-                  label="NVIDIA RTX / GTX"
-                  sublabel="RTX 30, 40, or 50 series · GTX 1660 or newer (2019+)"
+                  label="NVIDIA RTX"
+                  sublabel="Minimum RTX 2060 · Recommended RTX 3060 or newer"
                   selected={gpu === 'nvidia'}
                   onClick={() => setGpu('nvidia')}
                 />
                 <RadioCard
-                  label="AMD GPU or no dedicated GPU"
+                  label="AMD Radeon or no dedicated GPU"
                   sublabel="Integrated graphics, AMD Radeon, or CPU-only"
                   selected={gpu === 'amd-no-gpu'}
                   onClick={() => setGpu('amd-no-gpu')}
@@ -261,8 +280,7 @@ export default function Waitlist() {
                   borderRadius: 8,
                   padding: '0.75rem 1rem',
                 }}>
-                  Brand Gita requires an NVIDIA GPU for hardware video encoding on Windows. AMD-only and integrated graphics aren&rsquo;t supported in the beta.
-                  We&rsquo;ll open AMD support in a future release — check back then.
+                  Brand Gita requires an NVIDIA RTX GPU for hardware video encoding on Windows. AMD Radeon and integrated graphics aren&rsquo;t supported in the beta — we&rsquo;ll add AMD support in a future release.
                 </p>
               )}
             </div>
