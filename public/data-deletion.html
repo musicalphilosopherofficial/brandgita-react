@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Deletion — Brand Gita</title>
+  <link rel="icon" type="image/png" href="icon.png" />
+  <link rel="apple-touch-icon" href="icon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      font-weight: 300;
+      color: #1A1A18;
+      background: #EBE7DB;
+      padding: 3rem 1.5rem;
+    }
+
+    .container { max-width: 780px; margin: 0 auto; }
+
+    .nav {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding-bottom: 1rem;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid #DCD7C8;
+    }
+    .nav a {
+      font-size: 0.8rem;
+      color: #4A4842;
+      text-decoration: underline;
+    }
+    .nav a:hover { color: #2196F3; }
+
+    a { color: #2196F3; text-decoration: underline; }
+    a:hover { color: #1E86DB; }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #1A1A18;
+      margin-bottom: 0.25rem;
+    }
+
+    .last-updated {
+      color: #9B9789;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: #1A1A18;
+      margin: 2.5rem 0 0.75rem;
+      border-top: 1px solid #DCD7C8;
+      padding-top: 1.5rem;
+    }
+
+    p { margin-bottom: 1rem; color: #1A1A18; }
+
+    ul {
+      margin: 0.5rem 0 1rem 1.5rem;
+    }
+
+    li { margin-bottom: 0.4rem; color: #1A1A18; }
+
+    strong { font-weight: 600; }
+
+    hr {
+      border: none;
+      border-top: 1px solid #DCD7C8;
+      margin: 2rem 0;
+    }
+
+    .summary-box {
+      background: #F4F0E8;
+      border: 1px solid #DCD7C8;
+      border-left: 3px solid #2196F3;
+      border-radius: 0 8px 8px 0;
+      padding: 1.25rem 1.5rem;
+      margin: 1rem 0 1.5rem;
+    }
+    .summary-box p { margin-bottom: 0.6rem; }
+    .summary-box p:last-child { margin-bottom: 0; }
+
+    .steps {
+      counter-reset: steps;
+      list-style: none;
+      margin: 0.5rem 0 1.5rem 0;
+      padding: 0;
+    }
+    .steps li {
+      counter-increment: steps;
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      align-items: flex-start;
+    }
+    .steps li::before {
+      content: counter(steps);
+      background: #1A1A18;
+      color: #EBE7DB;
+      border-radius: 50%;
+      min-width: 1.6rem;
+      height: 1.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-top: 0.15rem;
+      flex-shrink: 0;
+    }
+
+    footer {
+      margin-top: 4rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #DCD7C8;
+      font-size: 0.8rem;
+      color: #9B9789;
+      text-align: center;
+    }
+    footer a { color: #6E6B62; }
+    footer a:hover { color: #2196F3; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <nav class="nav">
+    <a href="/">← Home</a>
+  </nav>
+
+  <h1>Data Deletion</h1>
+  <p class="last-updated">Last updated May 20, 2026</p>
+
+  <div class="summary-box">
+    <p><strong>Short version:</strong> Brand Gita does not store your Instagram or Facebook data on our servers. Your content stays on your device. To remove your connection, revoke access directly in your Instagram or Facebook settings — or email us and we will handle it within 30 days.</p>
+  </div>
+
+  <h2>What Data Brand Gita Accesses via Google / Instagram / Facebook</h2>
+  <p>When you connect your accounts to Brand Gita, we request access to:</p>
+  <ul>
+    <li><strong>Your account name and profile</strong> — used to identify your account inside the app (Instagram and Google)</li>
+    <li><strong>Permission to publish to your Instagram feed</strong> — so Brand Gita can post content to Instagram on your behalf, when you choose to publish</li>
+    <li><strong>Permission to upload and publish to your YouTube channel</strong> — so Brand Gita can post videos to YouTube on your behalf, when you choose to publish</li>
+  </ul>
+  <p>We store only your OAuth access token locally on your device, inside your operating system's secure credential store. We do not upload, cache, or retain your Instagram credentials or media on any Brand Gita server.</p>
+
+  <h2>How to Delete Your Data</h2>
+  <p>Because Brand Gita stores credentials locally on your device, deletion is straightforward:</p>
+
+  <ol class="steps">
+    <li><span><strong>Disconnect your accounts in Brand Gita.</strong> Open Brand Gita → Settings → disconnect your Instagram and Google accounts. This deletes the stored tokens from your device's secure credential store.</span></li>
+    <li><span><strong>Uninstall the app (optional).</strong> Uninstalling Brand Gita removes all locally stored data, including any cached profile information.</span></li>
+  </ol>
+
+  <h2>Request Deletion by Email</h2>
+  <p>If you would like us to confirm deletion of any data associated with your account, email us at <a href="mailto:support@brandgita.com">support@brandgita.com</a> with the subject line <strong>"Data Deletion Request"</strong>. Include the email address or Instagram username associated with your account. We will process your request and confirm deletion within <strong>30 days</strong>.</p>
+
+  <h2>Questions</h2>
+  <p>Contact us at <a href="mailto:support@brandgita.com">support@brandgita.com</a>. For full details on how we handle your data, see our <a href="/privacy-policy">Privacy Policy</a>.</p>
+
+  <footer>
+    <p>&copy; 2026 Brand Gita &nbsp;&middot;&nbsp; <a href="/">Home</a> &nbsp;&middot;&nbsp; <a href="/privacy-policy">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="mailto:support@brandgita.com">support@brandgita.com</a></p>
+  </footer>
+
+</div>
+</body>
+</html>

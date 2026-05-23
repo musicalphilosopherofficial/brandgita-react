@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brand Gita — Turn one video into a week of content, styled to who you are</title>
+  <link rel="icon" type="image/png" href="icon.png" />
+  <link rel="apple-touch-icon" href="icon.png" />
+  <meta name="description" content="Turn a single video into a week of content — edited and styled to who you are. For entrepreneurs, coaches, and educators who show up on camera." />
+  <meta name="author" content="Utsav Dhruv Trivedi" />
+  <link rel="canonical" href="https://brandgita.com/" />
+  <meta property="og:title" content="Brand Gita — Turn one video into a week of content, styled to who you are" />
+  <meta property="og:description" content="Turn a single video into a week of content — edited and styled to who you are. For entrepreneurs, coaches, and educators who show up on camera." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://brandgita.com/" />
+  <meta property="og:site_name" content="Brand Gita" />
+  <meta property="og:image" content="https://brandgita.com/icon.png" />
+  <meta property="og:image:alt" content="Brand Gita logo" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Brand Gita — Turn one video into a week of content, styled to who you are" />
+  <meta name="twitter:description" content="Turn a single video into a week of content — edited and styled to who you are. For entrepreneurs, coaches, and educators who show up on camera." />
+  <meta name="twitter:image" content="https://brandgita.com/icon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #EBE7DB;
+      color: #1A1A18;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1.5rem 2rem;
+    }
+
+    .page { max-width: 900px; width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+    /* ── Banner logo ── */
+    .logo-banner {
+      margin-bottom: 2.5rem;
+      opacity: 0.92;
+    }
+    .logo-banner img,
+    .logo-banner svg {
+      height: 56px;
+      width: auto;
+    }
+
+    /* ── Eyebrow ── */
+    .eyebrow {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #2196F3;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Hero ── */
+    h1 {
+      font-size: clamp(1.6rem, 4vw, 2.5rem);
+      font-weight: 700;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      color: #1A1A18;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .sub {
+      font-size: 1rem;
+      font-weight: 300;
+      line-height: 1.72;
+      color: #4A4842;
+      text-align: center;
+      max-width: 580px;
+      margin-bottom: 3.5rem;
+    }
+
+    .sub strong {
+      font-weight: 600;
+      color: #1A1A18;
+    }
+
+    /* ── Divider ── */
+    hr {
+      border: none;
+      border-top: 1px solid #D0CBC0;
+      width: 100%;
+      margin: 0 0 4rem;
+    }
+
+    /* ── What's included ── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #9B9789;
+      margin-bottom: 1.25rem;
+      align-self: flex-start;
+    }
+
+    .section-label--prominent {
+      font-size: 15px;
+      letter-spacing: 0.12em;
+      color: #1A1A18;
+      align-self: center;
+      text-align: center;
+    }
+
+    .features {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature {
+      background: #F4F0E8;
+      border: 1px solid #D8D3C8;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 400;
+      color: #1A1A18;
+      line-height: 1.4;
+    }
+
+    .feature .feat-label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.2rem;
+    }
+
+    .feature .feat-sub {
+      color: #6E6B62;
+      font-size: 0.8rem;
+      font-weight: 300;
+    }
+
+    .coming-soon-row {
+      width: 100%;
+      background: #F4F0E8;
+      border: 1px dashed #C8C3B8;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 4rem;
+      display: flex;
+      align-items: baseline;
+      gap: 0.6rem;
+    }
+
+    .coming-soon-row .cs-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #9B9789;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .coming-soon-row .cs-items {
+      font-size: 0.8rem;
+      font-weight: 300;
+      color: #6E6B62;
+      line-height: 1.5;
+    }
+
+    /* ── Closing ── */
+    .closing {
+      font-size: 0.875rem;
+      font-weight: 300;
+      color: #6E6B62;
+      text-align: center;
+      max-width: 480px;
+      line-height: 1.65;
+      margin-bottom: 2.5rem;
+      font-style: italic;
+    }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block;
+      background: #1A1A18;
+      color: #EBE7DB;
+      border-radius: 100px;
+      padding: 0.45rem 1.25rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 3.5rem;
+    }
+
+    /* ── FAQ ── */
+    .faq {
+      width: 100%;
+      margin-bottom: 4rem;
+    }
+
+    .faq-item {
+      border-top: 1px solid #D0CBC0;
+      padding: 1.1rem 0;
+    }
+
+    .faq-item:last-child {
+      border-bottom: 1px solid #D0CBC0;
+    }
+
+    .faq-q {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #1A1A18;
+      margin-bottom: 0.45rem;
+    }
+
+    .faq-a {
+      font-size: 0.85rem;
+      font-weight: 300;
+      color: #4A4842;
+      line-height: 1.65;
+    }
+
+    .faq-a a { color: #2196F3; text-decoration: underline; }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: auto;
+      padding-top: 1.5rem;
+      border-top: 1px solid #D0CBC0;
+      width: 100%;
+      font-size: 0.8rem;
+      color: #9B9789;
+      text-align: center;
+    }
+    footer a { color: #6E6B62; text-decoration: underline; }
+    footer a:hover { color: #2196F3; }
+
+    /* ── Top nav ── */
+    .top-nav {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding-bottom: 1rem;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid #D0CBC0;
+    }
+    .top-nav a {
+      font-size: 0.8rem;
+      color: #4A4842;
+      text-decoration: underline;
+    }
+    .top-nav a:hover { color: #2196F3; }
+
+    /* ── Founder quote ── */
+    .founder-quote {
+      width: 100%;
+      border-left: 3px solid #2196F3;
+      padding: 0.85rem 1.25rem;
+      margin-top: 2.75rem;
+      margin-bottom: 3rem;
+      background: #F4F0E8;
+      border-radius: 0 6px 6px 0;
+    }
+    .founder-quote p {
+      font-size: 0.875rem;
+      font-weight: 300;
+      font-style: italic;
+      color: #4A4842;
+      line-height: 1.65;
+      margin-bottom: 0.5rem;
+    }
+    .founder-quote cite {
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-style: normal;
+      color: #1A1A18;
+    }
+
+    /* ── Why Brand Gita ── */
+    .comparison {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin-bottom: 2.75rem;
+    }
+
+    .comp-col {
+      background: #F4F0E8;
+      border: 1px solid #D8D3C8;
+      border-radius: 6px;
+      padding: 1rem;
+    }
+
+    .comp-col--highlight {
+      border-color: #2196F3;
+    }
+
+    .comp-header {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1A1A18;
+      margin-bottom: 0.2rem;
+    }
+
+    .comp-header--blue { color: #2196F3; }
+
+    .comp-tool {
+      font-size: 0.72rem;
+      font-weight: 400;
+      color: #9B9789;
+      margin-bottom: 0.75rem;
+      line-height: 1.4;
+    }
+
+    .comp-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .comp-list li {
+      font-size: 0.8rem;
+      font-weight: 300;
+      color: #6E6B62;
+      line-height: 1.5;
+      padding: 0.28rem 0;
+      border-top: 1px solid #E8E3D8;
+    }
+
+    .comp-list li:first-child { border-top: none; }
+
+    .comp-list li strong {
+      color: #1A1A18;
+      font-weight: 700;
+    }
+
+    @media (max-width: 600px) {
+      .features { grid-template-columns: 1fr; }
+      .comparison { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <nav class="top-nav">
+    <a href="/privacy-policy">Privacy Policy</a>
+  </nav>
+
+  <div class="logo-banner">
+    <img src="logo-banner.svg" alt="Brand Gita — Your Brand's Personal Stylist" />
+  </div>
+
+  <p class="eyebrow">For entrepreneurs, coaches, and educators who show up on camera</p>
+
+  <h1>Turn a single video into a week of content — edited and styled to who you are.</h1>
+
+  <p class="sub">
+    You show up on camera because you have something real to say — and you want your content to prove it.<br><br>
+    Every AI tool you've tried strips your voice out and hands you something polished but generic. <strong>Hours of editing. Same generic look. No life, no flavour.</strong><br><br>
+    Brand Gita runs a one-time brand interview — then every clip, carousel, and caption it produces sounds and looks like you — not like the tool. <strong>Your footage never leaves your machine.</strong>
+  </p>
+
+  <div class="badge">Founding creator applications opening soon — spots limited</div>
+
+  <hr />
+
+  <div class="section-label section-label--prominent">What's included</div>
+
+  <div class="features">
+    <div class="feature">
+      <span class="feat-label">Brand interview</span>
+      <span class="feat-sub">One interview. Your brand on file — no re-briefing, ever.</span>
+    </div>
+    <div class="feature">
+      <span class="feat-label">Video processing</span>
+      <span class="feat-sub">Sounds cleaner, looks better — processed on your machine.</span>
+    </div>
+    <div class="feature">
+      <span class="feat-label">Short-form video</span>
+      <span class="feat-sub">Vertical clips cut and branded from your long-form video.</span>
+    </div>
+    <div class="feature">
+      <span class="feat-label">Instagram carousels</span>
+      <span class="feat-sub">On-brand slides built from your content — no Canva required.</span>
+    </div>
+    <div class="feature">
+      <span class="feat-label">Captions</span>
+      <span class="feat-sub">Word-by-word captions styled to your brand.</span>
+    </div>
+    <div class="feature">
+      <span class="feat-label">Direct publishing</span>
+      <span class="feat-sub">Publish to YouTube and Instagram — no third-party scheduler.</span>
+    </div>
+    <div class="feature">
+      <span class="feat-label">Thumbnails</span>
+      <span class="feat-sub">On-brand thumbnail generated for every video — no design tool required.</span>
+    </div>
+  </div>
+
+  <div class="coming-soon-row">
+    <span class="cs-label">Coming soon</span>
+    <span class="cs-items">TikTok publishing &nbsp;·&nbsp; LinkedIn carousels &nbsp;·&nbsp; Analytics &amp; coaching layer &nbsp;·&nbsp; Motion graphic reels</span>
+  </div>
+
+  <hr />
+
+  <div class="section-label section-label--prominent">Why Brand Gita?</div>
+
+  <div class="comparison">
+    <div class="comp-col comp-col--highlight">
+      <div class="comp-header comp-header--blue">With Brand Gita</div>
+      <div class="comp-tool">One interview. Every piece of content, forever.</div>
+      <ul class="comp-list">
+        <li>Pre-shoot coaching — <strong>lighting, framing, delivery, story</strong></li>
+        <li>Post-shoot coaching — <strong>what landed, what to sharpen next time</strong></li>
+        <li><strong>No editing skills needed</strong></li>
+        <li>Brand voice captured in a <strong>one-time interview</strong> — <strong>every clip inherits it, no re-briefing, ever</strong></li>
+        <li><strong>Applied to every piece of content, forever</strong></li>
+        <li><strong>Mirrors you more with every session</strong></li>
+        <li><strong>Batch record once</strong>, publish for months</li>
+        <li>Recommends what to post — <strong>you always have the final say</strong></li>
+        <li>Clips, carousels, captions — <strong>all on-brand</strong></li>
+        <li><strong>No manual uploads</strong> — <strong>auto schedules and publishes</strong> from your machine</li>
+      </ul>
+    </div>
+    <div class="comp-col">
+      <div class="comp-header">Without it</div>
+      <div class="comp-tool">Every other tool, workflow, or workaround</div>
+      <ul class="comp-list">
+        <li>Your <strong>footage lives on someone else's server</strong></li>
+        <li><strong>Hours of editing</strong> — or hours of prompting — same result</li>
+        <li>Output <strong>sounds like everyone else</strong> no matter what you try</li>
+        <li><strong>One video in, one video out</strong> — repurposing is a separate job</li>
+        <li><strong>Rebuild your preferences</strong> from scratch every session</li>
+        <li><strong>Upload, edit, re-download, publish</strong> — four steps, every time</li>
+        <li>Outsource editing — <strong>train them, they leave, start over</strong></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="founder-quote">
+    <p>"I lived every one of those pains personally while building my own YouTube channel. That drove me to take a break and fix this problem for good."</p>
+    <p>"You compose. We handle the rest."</p>
+    <cite>— Utsav Trivedi — Composer of Brand Gita &nbsp;·&nbsp; YouTuber &amp; Founder of Karma OS</cite>
+  </div>
+
+  <hr />
+
+  <div class="section-label section-label--prominent">Frequently asked questions</div>
+
+  <div class="faq">
+
+    <div class="faq-item">
+      <p class="faq-q">Who is this for?</p>
+      <p class="faq-a">Entrepreneurs, coaches, and educators who teach or share expertise on camera. You have a point of view and a body of knowledge — and an audience that follows you for what you know, or one you're actively building online. If your content is meant to build trust and move people toward a decision, this is for you.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Who is it not for?</p>
+      <p class="faq-a">It's not for lifestyle vloggers, day-in-the-life creators, or anyone whose content is primarily entertainment. If you don't have a specific expertise or perspective you're trying to teach, Brand Gita doesn't have much to work with. It's also not for text-only content — it's built around video you recorded yourself.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Does my footage stay on my machine?</p>
+      <p class="faq-a">Yes. Brand Gita runs entirely on your device. Your video is never uploaded to any server — processing happens locally, and nothing leaves your machine unless you choose to publish.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Do you use your own AI or mine?</p>
+      <p class="faq-a">Yours. You connect your own API key from OpenAI, Anthropic, or run models locally via Ollama. Brand Gita orchestrates the work — we never touch your AI account, and you pay for AI at cost with no markup.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">What is the brand interview?</p>
+      <p class="faq-a">A one-time onboarding session where Brand Gita learns your voice, aesthetic, and style. Every clip, carousel, and caption it produces after that is filtered through it. No re-briefing, ever.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">What platforms does it publish to?</p>
+      <p class="faq-a">YouTube and Instagram in V1, directly — no third-party scheduler. TikTok and LinkedIn carousels are coming next.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">What do I need to get started?</p>
+      <p class="faq-a">Your video and an API key from OpenAI or Anthropic — or Ollama if you prefer to run models locally. Full hardware requirements will be published before launch.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">When can I get access?</p>
+      <p class="faq-a">Founding creator applications are opening soon — spots are limited. <a href="mailto:support@brandgita.com">Get in touch</a> if you want to be considered early.</p>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>&copy; 2026 Brand Gita &nbsp;&middot;&nbsp; Built by Utsav Trivedi in New Zealand &nbsp;&middot;&nbsp; <a href="/privacy-policy">Privacy</a> &nbsp;&middot;&nbsp; <a href="/terms">Terms</a> &nbsp;&middot;&nbsp; <a href="/acceptable-use">Acceptable Use</a> &nbsp;&middot;&nbsp; <a href="/cookie-policy">Cookies</a> &nbsp;&middot;&nbsp; <a href="/data-deletion">Data Deletion</a> &nbsp;&middot;&nbsp; <a href="mailto:support@brandgita.com">support@brandgita.com</a></p>
+  </footer>
+
+</div>
+</body>
+</html>

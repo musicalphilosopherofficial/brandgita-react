@@ -1,0 +1,35 @@
+/* Brand Gita — shared legal page styles */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.7; font-weight: 300; color: #1A1A18; background: #EBE7DB; padding: 3rem 1.5rem; }
+.container { max-width: 780px; margin: 0 auto; }
+.nav { display: flex; justify-content: center; align-items: center; padding-bottom: 1rem; margin-bottom: 2rem; border-bottom: 1px solid #DCD7C8; gap: 1.5rem; flex-wrap: wrap; }
+.nav a { font-size: 0.8rem; color: #4A4842; text-decoration: underline; }
+.nav a:hover { color: #2196F3; }
+a { color: #2196F3; text-decoration: underline; }
+a:hover { color: #1E86DB; }
+h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; color: #1A1A18; margin-bottom: 0.25rem; }
+.last-updated { color: #9B9789; font-size: 0.875rem; margin-bottom: 2rem; }
+h2 { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em; color: #1A1A18; margin: 2.5rem 0 0.75rem; border-top: 1px solid #DCD7C8; padding-top: 1.5rem; }
+h3 { font-size: 0.95rem; font-weight: 700; color: #1A1A18; margin: 1.5rem 0 0.5rem; }
+p { margin-bottom: 1rem; color: #1A1A18; }
+ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+li { margin-bottom: 0.4rem; color: #1A1A18; }
+strong { font-weight: 600; }
+em { font-style: italic; color: #4A4842; }
+hr { border: none; border-top: 1px solid #DCD7C8; margin: 2rem 0; }
+.notice-box { background: #FFF4E6; border: 1px solid #F0B97A; border-left: 3px solid #E67E22; border-radius: 0 8px 8px 0; padding: 1.25rem 1.5rem; margin: 1.5rem 0; }
+.notice-box p { margin-bottom: 0.6rem; }
+.notice-box p:last-child { margin-bottom: 0; }
+.summary-box { background: #F4F0E8; border: 1px solid #DCD7C8; border-left: 3px solid #2196F3; border-radius: 0 8px 8px 0; padding: 1.25rem 1.5rem; margin: 1rem 0 1.5rem; }
+.summary-box p { margin-bottom: 0.6rem; }
+.summary-box p:last-child { margin-bottom: 0; }
+.toc { background: #F4F0E8; border: 1px solid #DCD7C8; border-radius: 8px; padding: 1.25rem 1.5rem; margin: 1.5rem 0 2rem; }
+.toc strong { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #9B9789; margin-bottom: 0.75rem; }
+.toc ol { margin-left: 1.25rem; }
+.toc li { margin-bottom: 0.3rem; font-size: 0.875rem; color: #4A4842; }
+table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.875rem; }
+th, td { border: 1px solid #DCD7C8; padding: 0.6rem 0.75rem; text-align: left; vertical-align: top; color: #1A1A18; }
+th { background: #F4F0E8; font-weight: 600; font-size: 0.82rem; }
+footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid #DCD7C8; font-size: 0.8rem; color: #9B9789; text-align: center; }
+footer a { color: #6E6B62; }
+footer a:hover { color: #2196F3; }

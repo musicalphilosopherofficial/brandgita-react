@@ -35,3 +35,7 @@
   margin-bottom: 3.5rem;
   letter-spacing: 0.03em;
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,41 @@
+# Brand Gita — robots.txt
+# Allow all reputable search and social scrapers.
+
+User-agent: *
+Allow: /
+
+# Common bots explicitly welcomed (some hosts apply stricter defaults)
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+User-agent: Slackbot-LinkExpanding
+Allow: /
+
+User-agent: Discordbot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+Sitemap: https://brandgita.com/sitemap.xml
