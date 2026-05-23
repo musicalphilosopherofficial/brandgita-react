@@ -95,7 +95,7 @@ function StepLabel({ text }) {
 }
 
 export default function Waitlist() {
-  const [os, setOs] = useState(null)          // 'mac' | 'windows' | 'linux'
+  const [os, setOs] = useState(null)          // 'mac' | 'windows'
   const [chip, setChip] = useState(null)      // 'apple-silicon' | 'intel'
   const [gpu, setGpu] = useState(null)        // 'nvidia' | 'cpu'
   const [name, setName] = useState('')
@@ -106,13 +106,11 @@ export default function Waitlist() {
   function getHardwareValue() {
     if (os === 'mac') return chip === 'apple-silicon' ? 'mac-apple-silicon' : chip === 'intel' ? 'mac-intel' : null
     if (os === 'windows') return gpu === 'nvidia' ? 'windows-nvidia' : gpu === 'cpu' ? 'windows-cpu' : null
-    if (os === 'linux') return 'linux'
     return null
   }
 
   // Determine if the form is ready to show the email step
   const hardwareComplete =
-    os === 'linux' ||
     (os === 'mac' && chip !== null) ||
     (os === 'windows' && gpu !== null)
 
@@ -226,11 +224,6 @@ export default function Waitlist() {
                 label="Windows"
                 selected={os === 'windows'}
                 onClick={() => { setOs('windows'); setChip(null) }}
-              />
-              <RadioCard
-                label="Linux / Other"
-                selected={os === 'linux'}
-                onClick={() => { setOs('linux'); setChip(null); setGpu(null) }}
               />
             </div>
           </div>
