@@ -1,75 +1,97 @@
 import { useState } from 'react'
 
-// Hardware value mapping
-// mac-apple-silicon | mac-intel | windows-nvidia | windows-cpu | linux
-
 const COLORS = {
-  cream: '#EBE7DB',
   ink: '#1A1A18',
   softText: '#4A4842',
   blue: '#2196F3',
   border: '#D4CFC4',
-  borderFocus: '#2196F3',
   errorRed: '#C0392B',
   successGreen: '#27AE60',
+  accepted: { border: '#27AE60', bg: '#F0FDF4', dot: '#27AE60', badge: '#166534', badgeBg: '#DCFCE7' },
+  rejected: { border: '#C0392B', bg: '#FEF2F2', dot: '#C0392B', badge: '#991B1B', badgeBg: '#FEE2E2' },
+  neutral: { border: '#D4CFC4', bg: '#FDFCF9', dot: '#2196F3', dotBg: '#2196F3' },
 }
 
-const cardBase = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.75rem',
-  padding: '0.875rem 1.125rem',
-  border: `1.5px solid ${COLORS.border}`,
-  borderRadius: 10,
-  cursor: 'pointer',
-  background: '#FDFCF9',
-  transition: 'border-color 0.15s, background 0.15s',
-  userSelect: 'none',
-  width: '100%',
-  textAlign: 'left',
-}
+// status: 'accepted' | 'rejected' | null
+function RadioCard({ label, sublabel, selected, onClick, status }) {
+  const scheme =
+    selected && status === 'accepted' ? COLORS.accepted :
+    selected && status === 'rejected' ? COLORS.rejected :
+    COLORS.neutral
 
-function RadioCard({ label, sublabel, selected, onClick }) {
+  const borderColor = selected ? scheme.border : COLORS.border
+  const bgColor = selected
+    ? (status === 'accepted' ? scheme.bg : status === 'rejected' ? scheme.bg : '#EDF5FF')
+    : '#FDFCF9'
+  const dotBorderColor = selected ? scheme.border ?? COLORS.blue : COLORS.border
+  const dotBgColor = selected ? (scheme.dot ?? COLORS.blue) : 'transparent'
+
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
-        ...cardBase,
-        borderColor: selected ? COLORS.blue : COLORS.border,
-        background: selected ? '#EDF5FF' : '#FDFCF9',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '0.75rem',
+        padding: '0.875rem 1.125rem',
+        border: `1.5px solid ${borderColor}`,
+        borderRadius: 10,
+        cursor: 'pointer',
+        background: bgColor,
+        transition: 'border-color 0.15s, background 0.15s',
+        userSelect: 'none',
+        width: '100%',
+        textAlign: 'left',
       }}
     >
-      {/* Custom radio dot */}
+      {/* Radio dot */}
       <span style={{
         flexShrink: 0,
+        marginTop: 2,
         width: 18,
         height: 18,
         borderRadius: '50%',
-        border: `2px solid ${selected ? COLORS.blue : COLORS.border}`,
-        background: selected ? COLORS.blue : 'transparent',
+        border: `2px solid ${dotBorderColor}`,
+        background: selected ? dotBgColor : 'transparent',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         transition: 'border-color 0.15s, background 0.15s',
       }}>
         {selected && (
-          <span style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            background: '#fff',
-            display: 'block',
-          }} />
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', display: 'block' }} />
         )}
       </span>
 
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span style={{ fontSize: '0.9375rem', fontWeight: 500, color: COLORS.ink }}>
-          {label}
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.9375rem', fontWeight: 500, color: COLORS.ink }}>
+            {label}
+          </span>
+          {selected && status === 'accepted' && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: COLORS.accepted.badge,
+              background: COLORS.accepted.badgeBg,
+              padding: '2px 7px', borderRadius: 4,
+            }}>
+              ✓ Compatible
+            </span>
+          )}
+          {selected && status === 'rejected' && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: COLORS.rejected.badge,
+              background: COLORS.rejected.badgeBg,
+              padding: '2px 7px', borderRadius: 4,
+            }}>
+              ✗ Not supported
+            </span>
+          )}
         </span>
         {sublabel && (
-          <span style={{ fontSize: '0.8rem', color: COLORS.softText, fontWeight: 300 }}>
+          <span style={{ fontSize: '0.8rem', color: COLORS.softText, fontWeight: 300, lineHeight: 1.4 }}>
             {sublabel}
           </span>
         )}
@@ -81,13 +103,9 @@ function RadioCard({ label, sublabel, selected, onClick }) {
 function StepLabel({ text }) {
   return (
     <p style={{
-      fontSize: 11,
-      fontWeight: 700,
-      letterSpacing: '0.18em',
-      textTransform: 'uppercase',
-      color: COLORS.blue,
-      marginBottom: '0.75rem',
-      marginTop: 0,
+      fontSize: 11, fontWeight: 700, letterSpacing: '0.18em',
+      textTransform: 'uppercase', color: COLORS.blue,
+      marginBottom: '0.75rem', marginTop: 0,
     }}>
       {text}
     </p>
@@ -95,34 +113,37 @@ function StepLabel({ text }) {
 }
 
 export default function Waitlist() {
-  const [os, setOs] = useState(null)          // 'mac' | 'windows'
-  const [cpu, setCpu] = useState(null)        // 'intel' | 'amd'
-  const [gpu, setGpu] = useState(null)        // 'nvidia' | 'amd-no-gpu'
+  const [os, setOs] = useState(null)    // 'mac-m' | 'mac-intel' | 'windows'
+  const [cpu, setCpu] = useState(null)  // 'intel' | 'amd'
+  const [gpu, setGpu] = useState(null)  // 'nvidia' | 'amd-no-gpu'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [status, setStatus] = useState('idle') // 'idle' | 'loading' | 'success' | 'error'
+  const [status, setStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
   function getHardwareValue() {
-    if (os === 'mac') return 'mac-apple-silicon'
+    if (os === 'mac-m') return 'mac-apple-silicon'
     if (os === 'windows' && cpu && gpu === 'nvidia') return `windows-${cpu}-nvidia`
     return null
   }
 
-  const unsupported = os === 'windows' && gpu === 'amd-no-gpu'
+  const osAccepted = os === 'mac-m' ? 'accepted' : os === 'mac-intel' ? 'rejected' : null
+  const gpuAccepted = gpu === 'nvidia' ? 'accepted' : gpu === 'amd-no-gpu' ? 'rejected' : null
 
   const hardwareComplete =
-    os === 'mac' ||
+    os === 'mac-m' ||
     (os === 'windows' && cpu !== null && gpu === 'nvidia')
+
+  const anyRejected =
+    os === 'mac-intel' ||
+    gpu === 'amd-no-gpu'
 
   async function handleSubmit(e) {
     e.preventDefault()
     if (!email) return
-
     const hardware = getHardwareValue()
     setStatus('loading')
     setErrorMsg('')
-
     try {
       const res = await fetch('/waitlist', {
         method: 'POST',
@@ -146,24 +167,10 @@ export default function Waitlist() {
     return (
       <section style={sectionStyle}>
         <div style={containerStyle}>
-          <p style={{
-            fontSize: '1.0625rem',
-            fontWeight: 600,
-            color: COLORS.ink,
-            textAlign: 'center',
-            marginBottom: '0.5rem',
-          }}>
+          <p style={{ fontSize: '1.0625rem', fontWeight: 600, color: COLORS.ink, textAlign: 'center', marginBottom: '0.5rem' }}>
             You&rsquo;re on the list.
           </p>
-          <p style={{
-            fontSize: '0.9rem',
-            color: COLORS.softText,
-            textAlign: 'center',
-            fontWeight: 300,
-            lineHeight: 1.6,
-            maxWidth: 360,
-            margin: '0 auto',
-          }}>
+          <p style={{ fontSize: '0.9rem', color: COLORS.softText, textAlign: 'center', fontWeight: 300, lineHeight: 1.6, maxWidth: 360, margin: '0 auto' }}>
             We&rsquo;ll reach out before founding creator applications open.
           </p>
         </div>
@@ -175,38 +182,27 @@ export default function Waitlist() {
     <section style={sectionStyle}>
 
       <p style={{
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: '0.2em',
-        textTransform: 'uppercase',
-        color: COLORS.blue,
-        textAlign: 'center',
-        marginBottom: '0.75rem',
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.2em',
+        textTransform: 'uppercase', color: COLORS.blue,
+        textAlign: 'center', marginBottom: '0.75rem',
       }}>
-        Founding creator applications — 20 spots only
+        Founding creator applications
       </p>
 
       <h2 style={{
-        fontSize: 'clamp(1.1rem, 2.5vw, 1.4rem)',
-        fontWeight: 700,
-        color: COLORS.ink,
-        textAlign: 'center',
-        marginBottom: '0.5rem',
-        letterSpacing: '-0.01em',
-        lineHeight: 1.25,
+        fontSize: 'clamp(1.1rem, 2.5vw, 1.4rem)', fontWeight: 700,
+        color: COLORS.ink, textAlign: 'center', marginBottom: '0.5rem',
+        letterSpacing: '-0.01em', lineHeight: 1.25,
       }}>
         Get in early. Get in free.
       </h2>
 
       <p style={{
-        fontSize: '0.9rem',
-        color: COLORS.softText,
-        textAlign: 'center',
-        fontWeight: 300,
-        lineHeight: 1.6,
-        marginBottom: '2rem',
+        fontSize: '0.9rem', color: COLORS.softText, textAlign: 'center',
+        fontWeight: 300, lineHeight: 1.6, marginBottom: '2rem',
       }}>
-        The first 20 creators on the waitlist get founding access — full product, no cost, in exchange for honest feedback. Tell us your setup so we can confirm you&rsquo;re compatible before applications open.
+        Early applicants get founding access — full product, no cost, in exchange for honest feedback.
+        Select your setup below to see if you&rsquo;re compatible.
       </p>
 
       <div style={containerStyle}>
@@ -217,17 +213,33 @@ export default function Waitlist() {
             <StepLabel text="Your operating system" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
               <RadioCard
-                label="Mac"
-                sublabel="Apple Silicon M series — minimum MacBook Air"
-                selected={os === 'mac'}
-                onClick={() => { setOs('mac'); setCpu(null); setGpu(null) }}
+                label="Mac — Apple M series"
+                sublabel="MacBook Air, MacBook Pro, Mac mini, iMac, Mac Studio, Mac Pro"
+                selected={os === 'mac-m'}
+                status={os === 'mac-m' ? 'accepted' : null}
+                onClick={() => { setOs('mac-m'); setCpu(null); setGpu(null) }}
+              />
+              <RadioCard
+                label="Mac — Intel"
+                sublabel="Any Mac with an Intel processor"
+                selected={os === 'mac-intel'}
+                status={os === 'mac-intel' ? 'rejected' : null}
+                onClick={() => { setOs('mac-intel'); setCpu(null); setGpu(null) }}
               />
               <RadioCard
                 label="Windows"
                 selected={os === 'windows'}
+                status={null}
                 onClick={() => { setOs('windows'); setCpu(null); setGpu(null) }}
               />
             </div>
+
+            {/* Intel Mac rejection message */}
+            {os === 'mac-intel' && (
+              <p style={rejectedMsgStyle}>
+                Intel Macs aren&rsquo;t supported — Brand Gita requires Apple Silicon for local video processing. If you upgrade to an M series Mac, come back and apply.
+              </p>
+            )}
           </div>
 
           {/* Step 2: Windows CPU */}
@@ -239,12 +251,14 @@ export default function Waitlist() {
                   label="Intel Core i5 / i7 / i9"
                   sublabel="Minimum i5 · Recommended i7 12th gen or newer"
                   selected={cpu === 'intel'}
+                  status={cpu === 'intel' ? 'accepted' : null}
                   onClick={() => { setCpu('intel'); setGpu(null) }}
                 />
                 <RadioCard
-                  label="AMD Ryzen"
+                  label="AMD Ryzen 5 / 7 / 9"
                   sublabel="Minimum Ryzen 5 · Recommended Ryzen 7 5000 series or newer"
                   selected={cpu === 'amd'}
+                  status={cpu === 'amd' ? 'accepted' : null}
                   onClick={() => { setCpu('amd'); setGpu(null) }}
                 />
               </div>
@@ -260,33 +274,26 @@ export default function Waitlist() {
                   label="NVIDIA RTX"
                   sublabel="Minimum RTX 2060 · Recommended RTX 3060 or newer"
                   selected={gpu === 'nvidia'}
+                  status={gpu === 'nvidia' ? 'accepted' : null}
                   onClick={() => setGpu('nvidia')}
                 />
                 <RadioCard
                   label="AMD Radeon or no dedicated GPU"
                   sublabel="Integrated graphics, AMD Radeon, or CPU-only"
                   selected={gpu === 'amd-no-gpu'}
+                  status={gpu === 'amd-no-gpu' ? 'rejected' : null}
                   onClick={() => setGpu('amd-no-gpu')}
                 />
               </div>
-              {unsupported && (
-                <p style={{
-                  marginTop: '1rem',
-                  fontSize: '0.875rem',
-                  color: '#7A6F63',
-                  lineHeight: 1.6,
-                  background: '#F2EFE9',
-                  border: '1px solid #D4CFC4',
-                  borderRadius: 8,
-                  padding: '0.75rem 1rem',
-                }}>
+              {gpu === 'amd-no-gpu' && (
+                <p style={rejectedMsgStyle}>
                   Brand Gita requires an NVIDIA RTX GPU for hardware video encoding on Windows. AMD Radeon and integrated graphics aren&rsquo;t supported in the beta — we&rsquo;ll add AMD support in a future release.
                 </p>
               )}
             </div>
           )}
 
-          {/* Step 3: Email */}
+          {/* Email step — only shown when fully compatible */}
           {hardwareComplete && (
             <div style={{ marginBottom: '1.25rem' }}>
               <StepLabel text="Your details" />
@@ -311,13 +318,7 @@ export default function Waitlist() {
               />
 
               {status === 'error' && errorMsg && (
-                <p style={{
-                  fontSize: '0.85rem',
-                  color: COLORS.errorRed,
-                  marginTop: '0.625rem',
-                  marginBottom: 0,
-                  fontWeight: 400,
-                }}>
+                <p style={{ fontSize: '0.85rem', color: COLORS.errorRed, marginTop: '0.625rem', marginBottom: 0 }}>
                   {errorMsg}
                 </p>
               )}
@@ -336,17 +337,10 @@ export default function Waitlist() {
                     <Spinner />
                     Submitting…
                   </span>
-                ) : 'Join the waitlist'}
+                ) : 'Apply for founding access'}
               </button>
 
-              <p style={{
-                fontSize: '0.775rem',
-                color: COLORS.softText,
-                textAlign: 'center',
-                marginTop: '0.75rem',
-                marginBottom: 0,
-                fontWeight: 300,
-              }}>
+              <p style={{ fontSize: '0.775rem', color: COLORS.softText, textAlign: 'center', marginTop: '0.75rem', marginBottom: 0, fontWeight: 300 }}>
                 No spam. We&rsquo;ll only contact you about your application.
               </p>
             </div>
@@ -361,57 +355,36 @@ export default function Waitlist() {
 function Spinner() {
   return (
     <span style={{
-      display: 'inline-block',
-      width: 14,
-      height: 14,
-      border: '2px solid rgba(255,255,255,0.35)',
-      borderTopColor: '#fff',
-      borderRadius: '50%',
-      animation: 'spin 0.7s linear infinite',
+      display: 'inline-block', width: 14, height: 14,
+      border: '2px solid rgba(255,255,255,0.35)', borderTopColor: '#fff',
+      borderRadius: '50%', animation: 'spin 0.7s linear infinite',
     }} />
   )
 }
 
-// Shared styles
 const sectionStyle = {
-  width: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  padding: '2rem 1rem 2.5rem',
+  width: '100%', display: 'flex', flexDirection: 'column',
+  alignItems: 'center', padding: '2rem 1rem 2.5rem',
 }
 
-const containerStyle = {
-  width: '100%',
-  maxWidth: 440,
-}
+const containerStyle = { width: '100%', maxWidth: 440 }
 
 const inputStyle = {
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: '0.75rem 1rem',
-  fontSize: '0.9375rem',
-  fontWeight: 400,
-  color: '#1A1A18',
-  background: '#FDFCF9',
-  border: '1.5px solid #D4CFC4',
-  borderRadius: 8,
-  outline: 'none',
-  fontFamily: 'inherit',
-  display: 'block',
+  width: '100%', boxSizing: 'border-box', padding: '0.75rem 1rem',
+  fontSize: '0.9375rem', fontWeight: 400, color: '#1A1A18',
+  background: '#FDFCF9', border: '1.5px solid #D4CFC4', borderRadius: 8,
+  outline: 'none', fontFamily: 'inherit', display: 'block',
 }
 
 const submitButtonStyle = {
-  marginTop: '1rem',
-  width: '100%',
-  padding: '0.875rem 1rem',
-  fontSize: '0.9375rem',
-  fontWeight: 600,
-  color: '#fff',
-  background: '#2196F3',
-  border: 'none',
-  borderRadius: 8,
-  fontFamily: 'inherit',
-  letterSpacing: '0.01em',
-  transition: 'opacity 0.15s',
+  marginTop: '1rem', width: '100%', padding: '0.875rem 1rem',
+  fontSize: '0.9375rem', fontWeight: 600, color: '#fff',
+  background: '#2196F3', border: 'none', borderRadius: 8,
+  fontFamily: 'inherit', letterSpacing: '0.01em', transition: 'opacity 0.15s',
+}
+
+const rejectedMsgStyle = {
+  marginTop: '0.875rem', fontSize: '0.85rem', color: '#7A6F63',
+  lineHeight: 1.6, background: '#F9F3F3', border: '1px solid #E8D0D0',
+  borderRadius: 8, padding: '0.75rem 1rem',
 }
