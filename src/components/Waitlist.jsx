@@ -320,20 +320,20 @@ export default function Waitlist() {
               <HowToCheck steps={[
                 '① Press the Windows key + Pause/Break — or go to Settings → System → About. Look for the "Processor" line.',
                 '② If it says "Intel Core i5 / i7 / i9" → select Intel below. If it says "AMD Ryzen 5 / 7 / 9" → select AMD.',
-                '③ Intel — how to read the model number: the first two digits after the dash tell you the generation. i7-12700H = 12th gen. i7-13700H = 13th gen. i5-1135G7 = 11th gen. 12th gen or newer is recommended.',
-                '④ AMD — how to read the model number: the first digit of the four-digit number tells you the series. Ryzen 7 5800H = 5000 series. Ryzen 7 7700X = 7000 series. 5000 series or newer is recommended.',
+                '③ Intel — i5, i7, and i9 are performance tiers (i9 > i7 > i5). The generation is the first two digits after the dash: i7-12700H = 12th gen, i7-13700H = 13th gen. 12th gen or newer recommended.',
+                '④ AMD — Ryzen 5, 7, and 9 are also performance tiers (9 > 7 > 5). The series is the first digit of the 4-digit model number: Ryzen 7 5800H = 5000 series, Ryzen 7 7700X = 7000 series. Note: the tier number and series number are unrelated — a Ryzen 7 can be 5000 or 7000 series. 5000 series or newer recommended.',
               ]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
                   label="Intel Core i5, i7, or i9"
-                  sublabel="i5 = minimum · i7 or i9 recommended · 12th gen or newer recommended (e.g. i7-12700, i7-13700)"
+                  sublabel="i5 = minimum · i7 or i9 recommended · 12th gen or newer recommended"
                   selected={cpu === 'intel'}
                   status={cpu === 'intel' ? 'accepted' : null}
                   onClick={() => { setCpu('intel'); setGpu(null) }}
                 />
                 <RadioCard
                   label="AMD Ryzen 5, 7, or 9"
-                  sublabel="Ryzen 5 = minimum · Ryzen 7 or 9 recommended · 5000 series or newer recommended (e.g. Ryzen 7 5800H, Ryzen 9 7900X)"
+                  sublabel="Ryzen 5 = minimum · Ryzen 7 or 9 recommended · 5000 series or newer recommended"
                   selected={cpu === 'amd'}
                   status={cpu === 'amd' ? 'accepted' : null}
                   onClick={() => { setCpu('amd'); setGpu(null) }}
