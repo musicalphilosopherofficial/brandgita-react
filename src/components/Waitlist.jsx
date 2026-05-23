@@ -112,6 +112,47 @@ function StepLabel({ text }) {
   )
 }
 
+function HowToCheck({ steps }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginBottom: '0.875rem', marginTop: '-0.25rem' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+          fontSize: '0.8rem', color: COLORS.blue, fontFamily: 'inherit',
+          display: 'flex', alignItems: 'center', gap: '0.3rem',
+        }}
+      >
+        <span style={{
+          display: 'inline-block', fontSize: 10,
+          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+          transition: 'transform 0.15s',
+        }}>▶</span>
+        {open ? 'Hide' : 'Not sure? How to check'}
+      </button>
+      {open && (
+        <div style={{
+          marginTop: '0.625rem', padding: '0.75rem 1rem',
+          background: '#F5F2EC', borderRadius: 8,
+          border: '1px solid #E2DDD4',
+        }}>
+          {steps.map((step, i) => (
+            <p key={i} style={{
+              margin: i === 0 ? 0 : '0.5rem 0 0',
+              fontSize: '0.8125rem', color: COLORS.softText,
+              lineHeight: 1.5, fontWeight: 300,
+            }}>
+              {step}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Waitlist() {
   const [os, setOs] = useState(null)     // 'mac' | 'windows'
   const [mac, setMac] = useState(null)   // 'pro' | 'neo' | 'intel'
@@ -230,6 +271,11 @@ export default function Waitlist() {
           {os === 'mac' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Your Mac" />
+              <HowToCheck steps={[
+                '① Click the Apple  menu (top-left) → About This Mac.',
+                '② Look for the "Chip" line. If it says M1, M2, M3, or M4 — that\'s Apple Silicon and you\'re compatible.',
+                '③ If it says "Intel Core" instead, select Intel Mac below.',
+              ]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
                   label="MacBook Air, MacBook Pro, Mac mini, iMac, Mac Studio or Mac Pro"
@@ -270,6 +316,11 @@ export default function Waitlist() {
           {os === 'windows' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Your processor" />
+              <HowToCheck steps={[
+                '① Press the Windows key + Pause/Break — or go to Settings → System → About.',
+                '② Look for the "Processor" line. It will say "Intel Core i5 / i7 / i9" or "AMD Ryzen 5 / 7 / 9".',
+                'Example: "Intel Core i7-12700H" → select Intel. "AMD Ryzen 7 5800H" → select AMD.',
+              ]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
                   label="Intel Core i5 / i7 / i9"
@@ -293,6 +344,12 @@ export default function Waitlist() {
           {os === 'windows' && cpu !== null && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Your graphics" />
+              <HowToCheck steps={[
+                '① Press Ctrl + Shift + Esc to open Task Manager → click the "Performance" tab → select "GPU".',
+                '② The GPU name will show in the top-right. "NVIDIA GeForce RTX…" → select NVIDIA RTX.',
+                '③ If you see only "Intel UHD Graphics" or "Intel Iris" with no separate GPU listed → select Intel integrated graphics.',
+                '④ "AMD Radeon RX…" → select AMD Radeon (not supported in the current beta).',
+              ]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
                   label="NVIDIA RTX"
