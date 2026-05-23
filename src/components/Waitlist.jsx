@@ -183,7 +183,7 @@ export default function Waitlist() {
         textAlign: 'center',
         marginBottom: '0.75rem',
       }}>
-        Founding creator applications opening soon — spots limited
+        Founding creator applications — 50 spots only
       </p>
 
       <h2 style={{
@@ -195,7 +195,7 @@ export default function Waitlist() {
         letterSpacing: '-0.01em',
         lineHeight: 1.25,
       }}>
-        Join the waitlist
+        Get in early. Get in free.
       </h2>
 
       <p style={{
@@ -206,7 +206,7 @@ export default function Waitlist() {
         lineHeight: 1.6,
         marginBottom: '2rem',
       }}>
-        Tell us your setup so we can confirm compatibility before you apply.
+        The first 50 creators on the waitlist get founding access — full product, no cost, in exchange for honest feedback. Tell us your setup so we can confirm you&rsquo;re compatible before applications open.
       </p>
 
       <div style={containerStyle}>
