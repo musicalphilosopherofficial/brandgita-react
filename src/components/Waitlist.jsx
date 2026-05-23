@@ -113,30 +113,27 @@ function StepLabel({ text }) {
 }
 
 export default function Waitlist() {
-  const [os, setOs] = useState(null)    // 'mac-m' | 'mac-intel' | 'windows'
-  const [cpu, setCpu] = useState(null)  // 'intel' | 'amd'
-  const [gpu, setGpu] = useState(null)  // 'nvidia' | 'amd-no-gpu'
+  const [os, setOs] = useState(null)     // 'mac' | 'windows'
+  const [mac, setMac] = useState(null)   // 'pro' | 'neo' | 'intel'
+  const [cpu, setCpu] = useState(null)   // 'intel' | 'amd'
+  const [gpu, setGpu] = useState(null)   // 'nvidia' | 'amd-no-gpu'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
   function getHardwareValue() {
-    if (os === 'mac-m') return 'mac-apple-silicon'
+    if (os === 'mac' && mac === 'pro') return 'mac-apple-silicon'
     if (os === 'windows' && cpu && gpu === 'nvidia') return `windows-${cpu}-nvidia`
     return null
   }
 
-  const osAccepted = os === 'mac-m' ? 'accepted' : os === 'mac-intel' ? 'rejected' : null
-  const gpuAccepted = gpu === 'nvidia' ? 'accepted' : gpu === 'amd-no-gpu' ? 'rejected' : null
+  const macStatus = mac === 'pro' ? 'accepted' : mac === 'neo' || mac === 'intel' ? 'rejected' : null
+  const gpuStatus = gpu === 'nvidia' ? 'accepted' : gpu === 'amd-no-gpu' ? 'rejected' : null
 
   const hardwareComplete =
-    os === 'mac-m' ||
+    (os === 'mac' && mac === 'pro') ||
     (os === 'windows' && cpu !== null && gpu === 'nvidia')
-
-  const anyRejected =
-    os === 'mac-intel' ||
-    gpu === 'amd-no-gpu'
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -213,36 +210,61 @@ export default function Waitlist() {
             <StepLabel text="Your operating system" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
               <RadioCard
-                label="Mac — Apple M series"
-                sublabel="MacBook Air, MacBook Pro, Mac mini, iMac, Mac Studio, Mac Pro"
-                selected={os === 'mac-m'}
-                status={os === 'mac-m' ? 'accepted' : null}
-                onClick={() => { setOs('mac-m'); setCpu(null); setGpu(null) }}
-              />
-              <RadioCard
-                label="Mac — Intel"
-                sublabel="Any Mac with an Intel processor"
-                selected={os === 'mac-intel'}
-                status={os === 'mac-intel' ? 'rejected' : null}
-                onClick={() => { setOs('mac-intel'); setCpu(null); setGpu(null) }}
+                label="Mac"
+                selected={os === 'mac'}
+                status={null}
+                onClick={() => { setOs('mac'); setMac(null); setCpu(null); setGpu(null) }}
               />
               <RadioCard
                 label="Windows"
                 selected={os === 'windows'}
                 status={null}
-                onClick={() => { setOs('windows'); setCpu(null); setGpu(null) }}
+                onClick={() => { setOs('windows'); setMac(null); setCpu(null); setGpu(null) }}
               />
             </div>
-
-            {/* Intel Mac rejection message */}
-            {os === 'mac-intel' && (
-              <p style={rejectedMsgStyle}>
-                Intel Macs aren&rsquo;t supported — Brand Gita requires Apple Silicon for local video processing. If you upgrade to an M series Mac, come back and apply.
-              </p>
-            )}
           </div>
 
-          {/* Step 2: Windows CPU */}
+          {/* Step 2: Mac model */}
+          {os === 'mac' && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <StepLabel text="Your Mac" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                <RadioCard
+                  label="MacBook Air, MacBook Pro, Mac mini, iMac, Mac Studio or Mac Pro"
+                  sublabel="Apple M series chip"
+                  selected={mac === 'pro'}
+                  status={mac === 'pro' ? 'accepted' : null}
+                  onClick={() => setMac('pro')}
+                />
+                <RadioCard
+                  label="Mac Neo"
+                  sublabel="Apple M series chip — budget range"
+                  selected={mac === 'neo'}
+                  status={mac === 'neo' ? 'rejected' : null}
+                  onClick={() => setMac('neo')}
+                />
+                <RadioCard
+                  label="Intel Mac"
+                  sublabel="Any Mac with an Intel processor"
+                  selected={mac === 'intel'}
+                  status={mac === 'intel' ? 'rejected' : null}
+                  onClick={() => setMac('intel')}
+                />
+              </div>
+              {mac === 'neo' && (
+                <p style={rejectedMsgStyle}>
+                  The Mac Neo is a budget-range machine not suited for the heavy local video processing Brand Gita requires. You&rsquo;d need a MacBook Air or Pro (M series) at minimum.
+                </p>
+              )}
+              {mac === 'intel' && (
+                <p style={rejectedMsgStyle}>
+                  Intel Macs aren&rsquo;t supported — Brand Gita requires Apple Silicon. If you upgrade to an M series Mac, come back and apply.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Windows CPU */}
           {os === 'windows' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Your processor" />
