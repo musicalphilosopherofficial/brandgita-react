@@ -35,17 +35,6 @@ export async function onRequest(context) {
     return json({ error: 'Valid email is required' }, 400);
   }
 
-  // Initialise table on first use (idempotent)
-  await env.DB.exec(`
-    CREATE TABLE IF NOT EXISTS waitlist (
-      id        INTEGER PRIMARY KEY AUTOINCREMENT,
-      email     TEXT    NOT NULL UNIQUE,
-      name      TEXT,
-      hardware  TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
-
   try {
     await env.DB.prepare(
       `INSERT INTO waitlist (email, name, hardware) VALUES (?, ?, ?)`
