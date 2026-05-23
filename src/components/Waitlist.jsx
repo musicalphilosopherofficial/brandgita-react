@@ -116,7 +116,7 @@ export default function Waitlist() {
   const [os, setOs] = useState(null)     // 'mac' | 'windows'
   const [mac, setMac] = useState(null)   // 'pro' | 'neo' | 'intel'
   const [cpu, setCpu] = useState(null)   // 'intel' | 'amd'
-  const [gpu, setGpu] = useState(null)   // 'nvidia' | 'amd-no-gpu'
+  const [gpu, setGpu] = useState(null)   // 'nvidia' | 'intel-igpu' | 'amd'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
@@ -124,16 +124,18 @@ export default function Waitlist() {
 
   function getHardwareValue() {
     if (os === 'mac' && mac === 'pro') return 'mac-apple-silicon'
-    if (os === 'windows' && cpu && gpu === 'nvidia') return `windows-${cpu}-nvidia`
+    if (os === 'windows' && cpu === 'intel' && gpu === 'nvidia') return 'windows-intel-nvidia'
+    if (os === 'windows' && cpu === 'intel' && gpu === 'intel-igpu') return 'windows-intel-qsv'
+    if (os === 'windows' && cpu === 'amd' && gpu === 'nvidia') return 'windows-amd-nvidia'
     return null
   }
 
-  const macStatus = mac === 'pro' ? 'accepted' : mac === 'neo' || mac === 'intel' ? 'rejected' : null
-  const gpuStatus = gpu === 'nvidia' ? 'accepted' : gpu === 'amd-no-gpu' ? 'rejected' : null
+  const gpuSupported = gpu === 'nvidia' || (gpu === 'intel-igpu' && cpu === 'intel')
+  const gpuStatus = gpuSupported ? 'accepted' : gpu === 'amd' ? 'rejected' : null
 
   const hardwareComplete =
     (os === 'mac' && mac === 'pro') ||
-    (os === 'windows' && cpu !== null && gpu === 'nvidia')
+    (os === 'windows' && cpu !== null && gpuSupported)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -287,10 +289,10 @@ export default function Waitlist() {
             </div>
           )}
 
-          {/* Step 3: Windows GPU */}
+          {/* Step 4: Windows GPU */}
           {os === 'windows' && cpu !== null && (
             <div style={{ marginBottom: '1.5rem' }}>
-              <StepLabel text="Your GPU" />
+              <StepLabel text="Your graphics" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
                   label="NVIDIA RTX"
@@ -299,12 +301,21 @@ export default function Waitlist() {
                   status={gpu === 'nvidia' ? 'accepted' : null}
                   onClick={() => setGpu('nvidia')}
                 />
+                {cpu === 'intel' && (
+                  <RadioCard
+                    label="Intel integrated graphics"
+                    sublabel="No dedicated GPU — uses Intel Quick Sync (QSV)"
+                    selected={gpu === 'intel-igpu'}
+                    status={gpu === 'intel-igpu' ? 'accepted' : null}
+                    onClick={() => setGpu('intel-igpu')}
+                  />
+                )}
                 <RadioCard
-                  label="AMD Radeon or no dedicated GPU"
-                  sublabel="Integrated graphics, AMD Radeon, or CPU-only"
-                  selected={gpu === 'amd-no-gpu'}
-                  status={gpu === 'amd-no-gpu' ? 'rejected' : null}
-                  onClick={() => setGpu('amd-no-gpu')}
+                  label="AMD Radeon"
+                  sublabel="AMD discrete or integrated graphics"
+                  selected={gpu === 'amd'}
+                  status={gpu === 'amd' ? 'rejected' : null}
+                  onClick={() => setGpu('amd')}
                 />
               </div>
               {gpu === 'amd-no-gpu' && (
