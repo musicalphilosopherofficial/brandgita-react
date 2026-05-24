@@ -1,7 +1,6 @@
 import './App.css'
 import AnimatedBanner from './components/AnimatedBanner'
 import Hero from './components/Hero'
-import Waitlist from './components/Waitlist'
 import Features from './components/Features'
 import FounderQuote from './components/FounderQuote'
 import Comparison from './components/Comparison'
@@ -14,8 +13,6 @@ export default function App() {
       <AnimatedBanner />
 
       <Hero />
-
-      <Waitlist />
 
       <hr className="page-divider" />
 
