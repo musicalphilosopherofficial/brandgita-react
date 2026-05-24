@@ -210,13 +210,10 @@ export default function Waitlist() {
       <section style={sectionStyle}>
         <div style={containerStyle}>
           <p style={{ fontSize: '1.0625rem', fontWeight: 600, color: COLORS.ink, textAlign: 'center', marginBottom: '0.5rem' }}>
-            Check your inbox.
+            You&rsquo;re on the list.
           </p>
           <p style={{ fontSize: '0.9rem', color: COLORS.softText, textAlign: 'center', fontWeight: 300, lineHeight: 1.6, maxWidth: 360, margin: '0 auto' }}>
-            We&rsquo;ve sent you a confirmation email. Click the link inside to secure your spot — unconfirmed applications won&rsquo;t be considered.
-          </p>
-          <p style={{ fontSize: '0.8rem', color: COLORS.softText, textAlign: 'center', fontWeight: 300, lineHeight: 1.6, maxWidth: 360, margin: '0.75rem auto 0' }}>
-            Can&rsquo;t find it? Check your spam folder.
+            We&rsquo;ll reach out when founding creator access opens.
           </p>
         </div>
       </section>
