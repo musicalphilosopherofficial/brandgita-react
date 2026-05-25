@@ -50,7 +50,7 @@ export async function onRequest(context) {
     return json({ error: 'Invalid JSON' }, 400);
   }
 
-  const { email, name, hardware, role, platform, monetise } = body;
+  const { email, name, hardware, role, platform, monetise, ai } = body;
 
   if (!name || !name.trim()) {
     return json({ error: 'First name is required' }, 400);
@@ -72,13 +72,13 @@ export async function onRequest(context) {
 
     if (existing) {
       await env.DB.prepare(
-        `UPDATE waitlist SET name=?, hardware=?, role=?, platform=?, monetise=?, priority_score=? WHERE id=?`
-      ).bind(cleanName, hardware || null, role || null, platform || null, monetise || null, score, existing.id).run();
+        `UPDATE waitlist SET name=?, hardware=?, role=?, platform=?, monetise=?, ai=?, priority_score=? WHERE id=?`
+      ).bind(cleanName, hardware || null, role || null, platform || null, monetise || null, ai || null, score, existing.id).run();
     } else {
       await env.DB.prepare(
-        `INSERT INTO waitlist (email, name, hardware, role, platform, monetise, priority_score)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).bind(cleanEmail, cleanName, hardware || null, role || null, platform || null, monetise || null, score).run();
+        `INSERT INTO waitlist (email, name, hardware, role, platform, monetise, ai, priority_score)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(cleanEmail, cleanName, hardware || null, role || null, platform || null, monetise || null, ai || null, score).run();
     }
   } catch (err) {
     console.error('D1 error:', err);

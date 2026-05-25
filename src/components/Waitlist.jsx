@@ -160,6 +160,7 @@ export default function Waitlist() {
   const [os, setOs] = useState(null)             // 'mac' | 'windows'
   const [mac, setMac] = useState(null)           // 'pro' | 'neo' | 'intel'
   const [winSetup, setWinSetup] = useState(null) // 'intel-nvidia' | 'amd-nvidia' | 'intel-qsv' | 'amd-unsupported'
+  const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai-only'
 
   const icpRejected = role === 'none'
   const icpComplete = role !== null && !icpRejected && platform !== null && monetise !== null
@@ -180,6 +181,8 @@ export default function Waitlist() {
     (os === 'mac' && mac === 'pro') ||
     (os === 'windows' && winSetup !== null && winSetup !== 'amd-unsupported')
 
+  const aiComplete = ai !== null && ai !== 'openai-only'
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!email) return
@@ -190,7 +193,7 @@ export default function Waitlist() {
       const res = await fetch('/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name: name.trim() || undefined, hardware, role, platform, monetise }),
+        body: JSON.stringify({ email, name: name.trim() || undefined, hardware, role, platform, monetise, ai }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -373,13 +376,13 @@ export default function Waitlist() {
                 label="Mac"
                 selected={os === 'mac'}
                 status={null}
-                onClick={() => { setOs('mac'); setMac(null); setWinSetup(null) }}
+                onClick={() => { setOs('mac'); setMac(null); setWinSetup(null); setAi(null) }}
               />
               <RadioCard
                 label="Windows"
                 selected={os === 'windows'}
                 status={null}
-                onClick={() => { setOs('windows'); setMac(null); setWinSetup(null) }}
+                onClick={() => { setOs('windows'); setMac(null); setWinSetup(null); setAi(null) }}
               />
             </div>
           </div>
@@ -481,8 +484,50 @@ export default function Waitlist() {
             </div>
           )}
 
-          {/* Email step — only shown when fully compatible */}
+          {/* Step 7: AI — only shown when hardware is compatible */}
           {hardwareComplete && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <StepLabel text="Which AI do you have access to?" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                <RadioCard
+                  label="Claude"
+                  sublabel="Claude.ai Pro subscription, or Claude Code"
+                  selected={ai === 'claude'}
+                  status={ai === 'claude' ? 'accepted' : null}
+                  onClick={() => setAi('claude')}
+                />
+                <RadioCard
+                  label="Google Gemini"
+                  sublabel="Google One AI Premium subscription, or Gemini CLI"
+                  selected={ai === 'gemini'}
+                  status={ai === 'gemini' ? 'accepted' : null}
+                  onClick={() => setAi('gemini')}
+                />
+                <RadioCard
+                  label="Ollama — local AI"
+                  sublabel="Open-source AI models installed and running on your own machine"
+                  selected={ai === 'ollama'}
+                  status={ai === 'ollama' ? 'accepted' : null}
+                  onClick={() => setAi('ollama')}
+                />
+                <RadioCard
+                  label="ChatGPT / OpenAI only"
+                  sublabel="No Claude, Gemini, or Ollama access"
+                  selected={ai === 'openai-only'}
+                  status={ai === 'openai-only' ? 'rejected' : null}
+                  onClick={() => setAi('openai-only')}
+                />
+              </div>
+              {ai === 'openai-only' && (
+                <p style={rejectedMsgStyle}>
+                  Brand Gita works with Claude, Gemini, and Ollama — ChatGPT and OpenAI aren&rsquo;t supported in the current beta. OpenAI support is on the roadmap. In the meantime, Claude and Gemini both have free tiers — sign up for one and come back to apply.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Email step — only shown when hardware + AI are both compatible */}
+          {hardwareComplete && aiComplete && (
             <div style={{ marginBottom: '1.25rem' }}>
               <StepLabel text="Your details" />
 
