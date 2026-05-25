@@ -505,7 +505,7 @@ export default function Waitlist() {
                 />
                 <RadioCard
                   label="Ollama"
-                  sublabel="Free — open-source models running locally on your machine"
+                  sublabel="Free · Minimum: Llama 3.2 8B · Recommended: Llama 3.3 70B"
                   selected={ai === 'ollama'}
                   status={ai === 'ollama' ? 'accepted' : null}
                   onClick={() => setAi('ollama')}
