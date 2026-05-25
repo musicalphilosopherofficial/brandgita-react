@@ -509,21 +509,18 @@ export default function Waitlist() {
                 />
                 <RadioCard
                   label="16 GB"
-                  sublabel="Minimum — mid-tier AI models"
                   selected={ram === '16gb'}
                   status={ram === '16gb' ? 'accepted' : null}
                   onClick={() => { setRam('16gb'); setAi(null) }}
                 />
                 <RadioCard
                   label="32 GB"
-                  sublabel="High-end AI models"
                   selected={ram === '32gb'}
                   status={ram === '32gb' ? 'accepted' : null}
                   onClick={() => { setRam('32gb'); setAi(null) }}
                 />
                 <RadioCard
                   label="64 GB or more"
-                  sublabel="Max — largest local AI models"
                   selected={ram === '64gb-plus'}
                   status={ram === '64gb-plus' ? 'accepted' : null}
                   onClick={() => { setRam('64gb-plus'); setAi(null) }}
