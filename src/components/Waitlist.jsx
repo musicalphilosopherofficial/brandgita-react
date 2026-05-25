@@ -491,21 +491,21 @@ export default function Waitlist() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
                   label="Claude"
-                  sublabel="Claude.ai Pro subscription, or Claude Code"
+                  sublabel="Minimum: Pro · Recommended: Max"
                   selected={ai === 'claude'}
                   status={ai === 'claude' ? 'accepted' : null}
                   onClick={() => setAi('claude')}
                 />
                 <RadioCard
                   label="Google Gemini"
-                  sublabel="Google One AI Premium subscription, or Gemini CLI"
+                  sublabel="Free tier works · Recommended: Gemini Advanced"
                   selected={ai === 'gemini'}
                   status={ai === 'gemini' ? 'accepted' : null}
                   onClick={() => setAi('gemini')}
                 />
                 <RadioCard
-                  label="Ollama — local AI"
-                  sublabel="Open-source AI models installed and running on your own machine"
+                  label="Ollama"
+                  sublabel="Free — open-source models running locally on your machine"
                   selected={ai === 'ollama'}
                   status={ai === 'ollama' ? 'accepted' : null}
                   onClick={() => setAi('ollama')}
