@@ -520,7 +520,7 @@ export default function Waitlist() {
               </div>
               {ai === 'openai-only' && (
                 <p style={rejectedMsgStyle}>
-                  Brand Gita works with Claude, Gemini, and Ollama — ChatGPT and OpenAI aren&rsquo;t supported in the current beta. OpenAI support is on the roadmap. In the meantime, Claude and Gemini both have free tiers — sign up for one and come back to apply.
+                  Brand Gita works with Claude, Gemini, and Ollama — ChatGPT and OpenAI aren&rsquo;t supported in the current beta. OpenAI support is on the roadmap. To apply, you&rsquo;ll need a Claude Pro subscription (or higher), a Google account with Gemini CLI, or Ollama installed locally.
                 </p>
               )}
             </div>
