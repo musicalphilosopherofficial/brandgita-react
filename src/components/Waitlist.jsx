@@ -160,6 +160,7 @@ export default function Waitlist() {
   const [os, setOs] = useState(null)             // 'mac' | 'windows'
   const [mac, setMac] = useState(null)           // 'pro' | 'neo' | 'intel'
   const [winSetup, setWinSetup] = useState(null) // 'intel-nvidia' | 'amd-nvidia' | 'intel-qsv' | 'amd-unsupported'
+  const [ram, setRam] = useState(null)           // '8gb' | '16gb' | '32gb' | '64gb-plus'
   const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai-only'
 
   const icpRejected = role === 'none'
@@ -177,9 +178,13 @@ export default function Waitlist() {
     return null
   }
 
-  const hardwareComplete =
+  // Hardware step 1: chip/GPU qualified
+  const chipQualified =
     (os === 'mac' && mac === 'pro') ||
     (os === 'windows' && winSetup !== null && winSetup !== 'amd-unsupported')
+
+  // Hardware fully complete: chip qualified + RAM meets minimum
+  const hardwareComplete = chipQualified && ram !== null && ram !== '8gb'
 
   const aiComplete = ai !== null && ai !== 'openai-only'
 
@@ -193,7 +198,7 @@ export default function Waitlist() {
       const res = await fetch('/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name: name.trim() || undefined, hardware, role, platform, monetise, ai }),
+        body: JSON.stringify({ email, name: name.trim() || undefined, hardware, role, platform, monetise, ram, ai }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -376,13 +381,13 @@ export default function Waitlist() {
                 label="Mac"
                 selected={os === 'mac'}
                 status={null}
-                onClick={() => { setOs('mac'); setMac(null); setWinSetup(null); setAi(null) }}
+                onClick={() => { setOs('mac'); setMac(null); setWinSetup(null); setRam(null); setAi(null) }}
               />
               <RadioCard
                 label="Windows"
                 selected={os === 'windows'}
                 status={null}
-                onClick={() => { setOs('windows'); setMac(null); setWinSetup(null); setAi(null) }}
+                onClick={() => { setOs('windows'); setMac(null); setWinSetup(null); setRam(null); setAi(null) }}
               />
             </div>
           </div>
@@ -404,21 +409,21 @@ export default function Waitlist() {
                   sublabel="Apple M series chip"
                   selected={mac === 'pro'}
                   status={mac === 'pro' ? 'accepted' : null}
-                  onClick={() => setMac('pro')}
+                  onClick={() => { setMac('pro'); setRam(null); setAi(null) }}
                 />
                 <RadioCard
                   label="Mac Neo"
                   sublabel="Apple M series chip — budget range"
                   selected={mac === 'neo'}
                   status={mac === 'neo' ? 'rejected' : null}
-                  onClick={() => setMac('neo')}
+                  onClick={() => { setMac('neo'); setRam(null); setAi(null) }}
                 />
                 <RadioCard
                   label="Intel Mac"
                   sublabel="Any Mac with an Intel processor"
                   selected={mac === 'intel'}
                   status={mac === 'intel' ? 'rejected' : null}
-                  onClick={() => setMac('intel')}
+                  onClick={() => { setMac('intel'); setRam(null); setAi(null) }}
                 />
               </div>
               {mac === 'neo' && (
@@ -451,28 +456,28 @@ export default function Waitlist() {
                   sublabel="Recommended RTX 3060 or newer · Intel 12th gen or newer recommended"
                   selected={winSetup === 'intel-nvidia'}
                   status={winSetup === 'intel-nvidia' ? 'accepted' : null}
-                  onClick={() => setWinSetup('intel-nvidia')}
+                  onClick={() => { setWinSetup('intel-nvidia'); setRam(null); setAi(null) }}
                 />
                 <RadioCard
                   label="AMD Ryzen 5, 7, or 9 + NVIDIA RTX"
                   sublabel="Recommended RTX 3060 or newer · Ryzen 5000 series or newer recommended"
                   selected={winSetup === 'amd-nvidia'}
                   status={winSetup === 'amd-nvidia' ? 'accepted' : null}
-                  onClick={() => setWinSetup('amd-nvidia')}
+                  onClick={() => { setWinSetup('amd-nvidia'); setRam(null); setAi(null) }}
                 />
                 <RadioCard
                   label="Intel Core i5, i7, or i9 — no NVIDIA GPU"
                   sublabel="No dedicated GPU, or with AMD Radeon — uses Intel Quick Sync (QSV)"
                   selected={winSetup === 'intel-qsv'}
                   status={winSetup === 'intel-qsv' ? 'accepted' : null}
-                  onClick={() => setWinSetup('intel-qsv')}
+                  onClick={() => { setWinSetup('intel-qsv'); setRam(null); setAi(null) }}
                 />
                 <RadioCard
                   label="AMD Ryzen — no NVIDIA GPU"
                   sublabel="AMD Radeon or no dedicated GPU"
                   selected={winSetup === 'amd-unsupported'}
                   status={winSetup === 'amd-unsupported' ? 'rejected' : null}
-                  onClick={() => setWinSetup('amd-unsupported')}
+                  onClick={() => { setWinSetup('amd-unsupported'); setRam(null); setAi(null) }}
                 />
               </div>
               {winSetup === 'amd-unsupported' && (
@@ -484,7 +489,55 @@ export default function Waitlist() {
             </div>
           )}
 
-          {/* Step 7: AI — only shown when hardware is compatible */}
+          {/* Step 7: RAM — shown once chip/GPU qualifies */}
+          {chipQualified && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <StepLabel text="How much RAM does your machine have?" />
+              <HowToCheck steps={[
+                os === 'windows'
+                  ? '① Go to Settings → System → About. Look for "Installed RAM".'
+                  : '① Click the Apple  menu → About This Mac. Look for "Memory".',
+                '② On Mac, this is unified memory — it is shared between CPU and GPU.',
+                '③ On Windows, this is your system RAM — separate from GPU VRAM.',
+              ].filter(Boolean)} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                <RadioCard
+                  label="8 GB"
+                  selected={ram === '8gb'}
+                  status={ram === '8gb' ? 'rejected' : null}
+                  onClick={() => { setRam('8gb'); setAi(null) }}
+                />
+                <RadioCard
+                  label="16 GB"
+                  sublabel="Minimum — mid-tier AI models"
+                  selected={ram === '16gb'}
+                  status={ram === '16gb' ? 'accepted' : null}
+                  onClick={() => { setRam('16gb'); setAi(null) }}
+                />
+                <RadioCard
+                  label="32 GB"
+                  sublabel="High-end AI models"
+                  selected={ram === '32gb'}
+                  status={ram === '32gb' ? 'accepted' : null}
+                  onClick={() => { setRam('32gb'); setAi(null) }}
+                />
+                <RadioCard
+                  label="64 GB or more"
+                  sublabel="Max — largest local AI models"
+                  selected={ram === '64gb-plus'}
+                  status={ram === '64gb-plus' ? 'accepted' : null}
+                  onClick={() => { setRam('64gb-plus'); setAi(null) }}
+                />
+              </div>
+              {ram === '8gb' && (
+                <p style={rejectedMsgStyle}>
+                  Brand Gita requires a minimum of 16 GB of RAM. 8 GB isn&rsquo;t enough to run local video processing and AI models side by side. You&rsquo;d need to upgrade before applying.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Step 8: AI — only shown when hardware is compatible */}
           {hardwareComplete && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Which AI do you have access to?" />
