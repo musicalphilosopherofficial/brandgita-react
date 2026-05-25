@@ -161,7 +161,7 @@ export default function Waitlist() {
   const [mac, setMac] = useState(null)           // 'pro' | 'neo' | 'intel'
   const [winSetup, setWinSetup] = useState(null) // 'intel-nvidia' | 'amd-nvidia' | 'intel-qsv' | 'amd-unsupported'
   const [ram, setRam] = useState(null)           // '8gb' | '16gb' | '32gb' | '64gb-plus'
-  const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai-only'
+  const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai'
 
   const icpRejected = role === 'none'
   const icpComplete = role !== null && !icpRejected && platform !== null && monetise !== null
@@ -186,7 +186,7 @@ export default function Waitlist() {
   // Hardware fully complete: chip qualified + RAM meets minimum
   const hardwareComplete = chipQualified && ram !== null && ram !== '8gb'
 
-  const aiComplete = ai !== null && ai !== 'openai-only'
+  const aiComplete = ai !== null
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -561,18 +561,13 @@ export default function Waitlist() {
                   onClick={() => setAi('ollama')}
                 />
                 <RadioCard
-                  label="ChatGPT / OpenAI only"
-                  sublabel="No Claude, Gemini, or Ollama access"
-                  selected={ai === 'openai-only'}
-                  status={ai === 'openai-only' ? 'rejected' : null}
-                  onClick={() => setAi('openai-only')}
+                  label="ChatGPT / OpenAI"
+                  sublabel="ChatGPT, GPT-4, or OpenAI API"
+                  selected={ai === 'openai'}
+                  status={null}
+                  onClick={() => setAi('openai')}
                 />
               </div>
-              {ai === 'openai-only' && (
-                <p style={rejectedMsgStyle}>
-                  Brand Gita works with Claude, Gemini, and Ollama in V1. OpenAI, ChatGPT, and LM Studio aren&rsquo;t supported yet — OpenAI-compatible HTTP support (which covers LM Studio and others) is on the roadmap. To apply, you&rsquo;ll need a Claude Pro subscription or higher, a Google account with Gemini CLI, or Ollama installed locally.
-                </p>
-              )}
             </div>
           )}
 
