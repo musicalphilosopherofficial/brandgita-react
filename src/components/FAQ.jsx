@@ -13,7 +13,7 @@ const faqs = [
   },
   {
     q: 'Do you use your own AI or mine?',
-    a: 'Yours. Brand Gita works with Claude, Google Gemini, and Ollama — no API keys to manage. For Claude, a Pro subscription is the minimum; Max is recommended for heavy editing sessions. For Gemini, a free Google account is enough to run the CLI; Gemini Advanced is recommended for heavier use. Ollama is free. OpenAI and ChatGPT support is on the roadmap.',
+    a: 'Yours. Brand Gita works with Claude, Google Gemini, and Ollama in V1 — no API keys to manage. For Claude, a Pro subscription is the minimum; Max is recommended for heavy editing sessions. For Gemini, a free Google account is enough to run the CLI; Gemini Advanced is recommended for heavier use. Ollama is free. OpenAI-compatible HTTP support — which covers OpenAI, LM Studio, and others — is on the roadmap.',
   },
   {
     q: 'What is the brand interview?',

@@ -558,7 +558,7 @@ export default function Waitlist() {
                 />
                 <RadioCard
                   label="Ollama"
-                  sublabel="Free · Minimum: Llama 3.2 8B · Recommended: Llama 3.3 70B"
+                  sublabel="Free — local AI running on your own machine"
                   selected={ai === 'ollama'}
                   status={ai === 'ollama' ? 'accepted' : null}
                   onClick={() => setAi('ollama')}
@@ -573,7 +573,7 @@ export default function Waitlist() {
               </div>
               {ai === 'openai-only' && (
                 <p style={rejectedMsgStyle}>
-                  Brand Gita works with Claude, Gemini, and Ollama — ChatGPT and OpenAI aren&rsquo;t supported in the current beta. OpenAI support is on the roadmap. To apply, you&rsquo;ll need a Claude Pro subscription (or higher), a Google account with Gemini CLI, or Ollama installed locally.
+                  Brand Gita works with Claude, Gemini, and Ollama in V1. OpenAI, ChatGPT, and LM Studio aren&rsquo;t supported yet — OpenAI-compatible HTTP support (which covers LM Studio and others) is on the roadmap. To apply, you&rsquo;ll need a Claude Pro subscription or higher, a Google account with Gemini CLI, or Ollama installed locally.
                 </p>
               )}
             </div>
