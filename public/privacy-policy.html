@@ -204,14 +204,15 @@
   <p>Brand Gita includes certain AI models (such as audio enhancement) that run entirely on your device. These models process your media locally — no data is transmitted to any external server. On-device models do not send telemetry, usage data, or user content to Brand Gita or any third party.</p>
 
   <h3>6.2 Bring Your Own AI (BYOAI)</h3>
-  <p>Brand Gita's core creative features require you to connect your own API credentials from an AI provider of your choosing. When you use these features:</p>
+  <p>Brand Gita's core creative features use AI tools you already have access to on your machine. Currently supported providers are Claude (Anthropic), Google Gemini, and Ollama (local open-source models). OpenAI and ChatGPT support is planned for a future release. When you use these features:</p>
   <ul>
-    <li>Your content is transmitted directly from your device to your chosen AI provider</li>
+    <li>For cloud-based providers (Claude, Gemini): your content is transmitted directly from your device to that provider</li>
+    <li>For local models (Ollama): all processing stays on your device — no data is transmitted externally</li>
     <li>Brand Gita does not intermediate, access, store, log, or process those communications</li>
     <li>Brand Gita does not train any AI model on your content</li>
     <li>The AI provider's own terms of service and privacy policy govern how your data is handled</li>
   </ul>
-  <p>Providers you may connect include (but are not limited to): Anthropic, OpenAI, Google Gemini, Ollama (local), and others. <strong>Brand Gita is not responsible for how any third-party AI provider handles your data.</strong></p>
+  <p>Supported providers: Claude (Anthropic), Google Gemini, Ollama (local). <strong>Brand Gita is not responsible for how any third-party AI provider handles your data.</strong></p>
 
   <h3>6.3 Your Responsibilities</h3>
   <p>You are responsible for:</p>

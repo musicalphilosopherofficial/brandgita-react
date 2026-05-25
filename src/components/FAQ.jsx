@@ -13,7 +13,7 @@ const faqs = [
   },
   {
     q: 'Do you use your own AI or mine?',
-    a: 'Yours. You connect your own API key from OpenAI, Anthropic, or run models locally via Ollama. Brand Gita orchestrates the work — we never touch your AI account, and you pay for AI at cost with no markup.',
+    a: 'Yours. Brand Gita works with Claude (Anthropic), Google Gemini, and Ollama — AI you already have access to. No API keys to manage and no markup on AI costs. OpenAI and ChatGPT support is on the roadmap.',
   },
   {
     q: 'What is the brand interview?',
@@ -25,7 +25,7 @@ const faqs = [
   },
   {
     q: 'What do I need to get started?',
-    a: 'Your video and an API key from OpenAI or Anthropic — or Ollama if you prefer to run models locally. Full hardware requirements will be published before launch.',
+    a: 'Your video, and access to Claude, Google Gemini, or Ollama — at least one of the three. Full hardware requirements are listed on the application form.',
   },
   {
     q: 'When can I get access?',
