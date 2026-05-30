@@ -210,7 +210,7 @@ export default function Waitlist() {
     const hardware = getHardwareValue()
     setStatus('loading')
     setErrorMsg('')
-    trackStep(sessionId, 'submitted', email)
+    trackStep(sessionId, 'submitted', null)
     try {
       const res = await fetch('/waitlist', {
         method: 'POST',

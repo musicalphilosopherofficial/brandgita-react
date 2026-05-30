@@ -52,7 +52,7 @@ export async function onRequest(context) {
     const prev = i > 0 ? funnel[i - 1].visitors : null
     const drop = dropPct(step.visitors, prev)
     const label = STEP_LABELS[step.step] || step.step
-    const breakdownHtml = step.breakdown.map(b => {
+    const breakdownHtml = step.step === 'submitted' ? '' : step.breakdown.map(b => {
       const bPct = Math.round((b.count / step.visitors) * 100)
       return `<span class="tag">${b.value} <b>${bPct}%</b></span>`
     }).join('')
