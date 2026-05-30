@@ -155,8 +155,8 @@ function HowToCheck({ steps }) {
 }
 
 export default function Waitlist() {
-  const [role, setRole] = useState(null)       // 'coach' | 'educator' | 'entrepreneur' | 'none'
-  const [platform, setPlatform] = useState(null) // 'youtube' | 'instagram' | 'both' | 'starting'
+  const [role, setRole] = useState(null)       // 'expert' | 'entrepreneur' | 'none'
+  const [platform, setPlatform] = useState(null) // 'youtube' | 'instagram' | 'both'
   const [monetise, setMonetise] = useState(null) // 'monetising' | 'building'
   const [os, setOs] = useState(null)             // 'mac' | 'windows'
   const [mac, setMac] = useState(null)           // 'pro' | 'neo' | 'intel'
@@ -255,22 +255,15 @@ export default function Waitlist() {
             <StepLabel text="What best describes you?" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
               <RadioCard
-                label="Coach or consultant"
-                sublabel="1:1 or group coaching, consulting services"
-                selected={role === 'coach'}
+                label="Coach, consultant, or educator"
+                sublabel="You teach or advise — courses, coaching, consulting, tutorials"
+                selected={role === 'expert'}
                 status={null}
-                onClick={() => setRole('coach')}
-              />
-              <RadioCard
-                label="Educator or course creator"
-                sublabel="Online courses, tutorials, teaching content"
-                selected={role === 'educator'}
-                status={null}
-                onClick={() => setRole('educator')}
+                onClick={() => setRole('expert')}
               />
               <RadioCard
                 label="Entrepreneur or founder"
-                sublabel="Building a business around your personal brand"
+                sublabel="Building a business around your personal brand and expertise"
                 selected={role === 'entrepreneur'}
                 status={null}
                 onClick={() => setRole('entrepreneur')}
@@ -285,7 +278,7 @@ export default function Waitlist() {
             </div>
             {icpRejected && (
               <p style={rejectedMsgStyle}>
-                Brand Gita is built specifically for coaches, educators, and entrepreneurs who show up on camera to share their expertise. It might not be the right fit right now — but if that changes, come back and apply.
+                Brand Gita is built for coaches, educators, and entrepreneurs who create expertise-based content on camera. It might not be the right fit right now — but if that changes, come back and apply.
               </p>
             )}
           </div>
@@ -293,35 +286,28 @@ export default function Waitlist() {
           {/* Step 2: Platform */}
           {role !== null && !icpRejected && (
             <div style={{ marginBottom: '1.5rem' }}>
-              <StepLabel text="Where do you share your expertise?" />
+              <StepLabel text="Where do you publish video content?" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
                   label="YouTube"
-                  sublabel="Long-form video — tutorials, vlogs, interviews"
+                  sublabel="Long-form video — tutorials, interviews, deep dives"
                   selected={platform === 'youtube'}
                   status={null}
                   onClick={() => setPlatform('youtube')}
                 />
                 <RadioCard
-                  label="Instagram"
-                  sublabel="Reels, carousels, stories"
-                  selected={platform === 'instagram'}
-                  status={null}
-                  onClick={() => setPlatform('instagram')}
-                />
-                <RadioCard
                   label="Both YouTube and Instagram"
-                  sublabel="Multi-platform — repurposing long-form into short-form"
+                  sublabel="Long-form on YouTube, repurposed to Reels and carousels"
                   selected={platform === 'both'}
                   status={null}
                   onClick={() => setPlatform('both')}
                 />
                 <RadioCard
-                  label="Just getting started"
-                  sublabel="Building toward publishing video content"
-                  selected={platform === 'starting'}
+                  label="Instagram only"
+                  sublabel="Reels, carousels, stories — no YouTube yet"
+                  selected={platform === 'instagram'}
                   status={null}
-                  onClick={() => setPlatform('starting')}
+                  onClick={() => setPlatform('instagram')}
                 />
               </div>
             </div>
