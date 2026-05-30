@@ -1,20 +1,22 @@
 /**
- * GET /admin/dashboard?secret=YOUR_EXPORT_SECRET
- * Visual funnel dashboard — fetches from /admin/funnel and renders HTML.
+ * GET /admin/dashboard
+ * Visual funnel dashboard. Protected by HTTP Basic Auth.
+ * Username: admin  Password: EXPORT_SECRET (set in Cloudflare Pages env vars)
+ * Browser saves credentials after first login — no URL token needed.
  */
+import { requireAuth } from './_auth.js'
+
 export async function onRequest(context) {
   const { request, env } = context
 
+  const unauth = requireAuth(request, env)
+  if (unauth) return unauth
+
   const url = new URL(request.url)
-  const secret = url.searchParams.get('secret')
 
-  if (!secret || secret !== env.EXPORT_SECRET) {
-    return new Response('Unauthorized', { status: 401 })
-  }
-
-  // Fetch funnel data from our own endpoint
+  // Fetch funnel data internally using the env secret directly
   const funnelUrl = new URL('/admin/funnel', url.origin)
-  funnelUrl.searchParams.set('secret', secret)
+  funnelUrl.searchParams.set('secret', env.EXPORT_SECRET)
   const funnelRes = await fetch(funnelUrl.toString())
   const data = await funnelRes.json()
 
@@ -114,7 +116,7 @@ export async function onRequest(context) {
 <body>
 <div class="wrap">
   <h1>Waitlist Funnel</h1>
-  <p class="subtitle">Brand Gita · live data · <a href="?secret=${secret}" style="color:#2196F3">refresh</a></p>
+  <p class="subtitle">Brand Gita · live data · <a href="/admin/dashboard" style="color:#2196F3">refresh</a></p>
 
   <div class="kpi-row">
     <div class="kpi">

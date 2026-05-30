@@ -1,16 +1,22 @@
 /**
- * GET /admin/funnel?secret=YOUR_EXPORT_SECRET
+ * GET /admin/funnel
  * Returns funnel drop-off summary + avg time per step from funnel_events.
- * Uses the same EXPORT_SECRET as /admin/export.
+ * Protected by HTTP Basic Auth (same EXPORT_SECRET as /admin/export).
+ * Also accepts ?secret= for internal server-to-server calls from dashboard.
  */
+import { requireAuth } from './_auth.js'
+
 export async function onRequest(context) {
   const { request, env } = context;
 
   const url = new URL(request.url);
   const secret = url.searchParams.get('secret');
 
-  if (!secret || secret !== env.EXPORT_SECRET) {
-    return new Response('Unauthorized', { status: 401 });
+  // Allow internal calls via ?secret= (from dashboard worker-to-worker fetch)
+  // otherwise require Basic Auth
+  if (secret !== env.EXPORT_SECRET) {
+    const unauth = requireAuth(request, env)
+    if (unauth) return unauth
   }
 
   // Last answer per step per session — ignores toggling
