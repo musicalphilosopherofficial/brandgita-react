@@ -43,6 +43,7 @@ function formatTime(ms) {
 
 export default function Checkout({ email, name }) {
   const [showModal, setShowModal] = useState(false)
+  const [selectedMethod, setSelectedMethod] = useState(null)
 
   // The priority window opens the moment this screen appears (i.e. the moment
   // they finish the form), resolved once at mount from localStorage so a refresh
@@ -168,11 +169,31 @@ export default function Checkout({ email, name }) {
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                 {METHODS.map(m => (
-                  <button key={m.id} type="button" onClick={() => handlePick(m.id)} style={payBtnStyle}>
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSelectedMethod(m.id)}
+                    style={{
+                      ...payBtnStyle,
+                      borderColor: selectedMethod === m.id ? COLORS.blue : COLORS.border,
+                      background: selectedMethod === m.id ? '#EDF5FF' : '#fff',
+                      color: selectedMethod === m.id ? COLORS.blue : COLORS.ink,
+                    }}
+                  >
                     {m.label}
                   </button>
                 ))}
               </div>
+
+              {selectedMethod && (
+                <button
+                  type="button"
+                  onClick={() => handlePick(selectedMethod)}
+                  style={checkoutBtnStyle}
+                >
+                  Complete checkout →
+                </button>
+              )}
             </>
           )}
         </div>
@@ -281,6 +302,13 @@ const payBtnStyle = {
   fontWeight: 600, color: COLORS.ink, background: '#fff',
   border: `1.5px solid ${COLORS.border}`, borderRadius: 9,
   cursor: 'pointer', fontFamily: 'inherit', transition: 'border-color 0.15s, background 0.15s',
+}
+
+const checkoutBtnStyle = {
+  marginTop: '0.75rem', width: '100%', padding: '0.9375rem 1rem',
+  fontSize: '1rem', fontWeight: 700, color: '#fff',
+  background: COLORS.blue, border: 'none', borderRadius: 9,
+  cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.01em',
 }
 
 const overlayStyle = {
