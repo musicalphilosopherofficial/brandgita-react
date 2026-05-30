@@ -157,11 +157,11 @@ function HowToCheck({ steps }) {
 export default function Waitlist() {
   const [role, setRole] = useState(null)       // 'coach' | 'educator' | 'entrepreneur' | 'none'
   const [platform, setPlatform] = useState(null) // 'youtube' | 'instagram' | 'both' | 'starting'
-  const [monetise, setMonetise] = useState(null) // 'courses' | 'coaching' | 'community' | 'building'
+  const [monetise, setMonetise] = useState(null) // 'monetising' | 'building'
   const [os, setOs] = useState(null)             // 'mac' | 'windows'
   const [mac, setMac] = useState(null)           // 'pro' | 'neo' | 'intel'
   const [winSetup, setWinSetup] = useState(null) // 'intel-nvidia' | 'amd-nvidia' | 'intel-qsv' | 'amd-unsupported'
-  const [ram, setRam] = useState(null)           // '8gb' | '16gb' | '32gb' | '64gb-plus'
+  const [ram, setRam] = useState(null)           // '16gb-plus' | 'under-16gb'
   const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai'
 
   const icpRejected = role === 'none'
@@ -185,7 +185,7 @@ export default function Waitlist() {
     (os === 'windows' && winSetup !== null && winSetup !== 'amd-unsupported')
 
   // Hardware fully complete: chip qualified + RAM meets minimum
-  const hardwareComplete = chipQualified && ram !== null && ram !== '8gb'
+  const hardwareComplete = chipQualified && ram !== null && ram !== 'under-16gb'
 
   const aiComplete = ai !== null
 
@@ -330,32 +330,18 @@ export default function Waitlist() {
           {/* Step 3: Monetisation */}
           {role !== null && !icpRejected && platform !== null && (
             <div style={{ marginBottom: '1.5rem' }}>
-              <StepLabel text="How do you monetise your expertise?" />
+              <StepLabel text="Are you already making money from your content or expertise?" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
-                  label="Courses or digital products"
-                  sublabel="Online courses, templates, digital downloads"
-                  selected={monetise === 'courses'}
+                  label="Yes — I have an offer"
+                  sublabel="Courses, coaching, consulting, community, or any paid product"
+                  selected={monetise === 'monetising'}
                   status={null}
-                  onClick={() => setMonetise('courses')}
+                  onClick={() => setMonetise('monetising')}
                 />
                 <RadioCard
-                  label="Coaching or consulting"
-                  sublabel="1:1 sessions, group programmes, retainers"
-                  selected={monetise === 'coaching'}
-                  status={null}
-                  onClick={() => setMonetise('coaching')}
-                />
-                <RadioCard
-                  label="Community or membership"
-                  sublabel="Paid community, membership site, subscription"
-                  selected={monetise === 'community'}
-                  status={null}
-                  onClick={() => setMonetise('community')}
-                />
-                <RadioCard
-                  label="Still building toward it"
-                  sublabel="Growing my audience before monetising"
+                  label="Not yet — building toward it"
+                  sublabel="Growing my audience and developing my offer"
                   selected={monetise === 'building'}
                   status={null}
                   onClick={() => setMonetise('building')}
@@ -494,33 +480,21 @@ export default function Waitlist() {
               ].filter(Boolean)} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
-                  label="8 GB"
-                  selected={ram === '8gb'}
-                  status={ram === '8gb' ? 'rejected' : null}
-                  onClick={() => { setRam('8gb'); setAi(null) }}
+                  label="16 GB or more"
+                  selected={ram === '16gb-plus'}
+                  status={ram === '16gb-plus' ? 'accepted' : null}
+                  onClick={() => { setRam('16gb-plus'); setAi(null) }}
                 />
                 <RadioCard
-                  label="16 GB"
-                  selected={ram === '16gb'}
-                  status={ram === '16gb' ? 'accepted' : null}
-                  onClick={() => { setRam('16gb'); setAi(null) }}
-                />
-                <RadioCard
-                  label="32 GB"
-                  selected={ram === '32gb'}
-                  status={ram === '32gb' ? 'accepted' : null}
-                  onClick={() => { setRam('32gb'); setAi(null) }}
-                />
-                <RadioCard
-                  label="64 GB or more"
-                  selected={ram === '64gb-plus'}
-                  status={ram === '64gb-plus' ? 'accepted' : null}
-                  onClick={() => { setRam('64gb-plus'); setAi(null) }}
+                  label="Less than 16 GB"
+                  selected={ram === 'under-16gb'}
+                  status={ram === 'under-16gb' ? 'rejected' : null}
+                  onClick={() => { setRam('under-16gb'); setAi(null) }}
                 />
               </div>
-              {ram === '8gb' && (
+              {ram === 'under-16gb' && (
                 <p style={rejectedMsgStyle}>
-                  Brand Gita requires a minimum of 16 GB of RAM. 8 GB isn&rsquo;t enough to run local video processing and AI models side by side. You&rsquo;d need to upgrade before applying.
+                  Brand Gita requires a minimum of 16 GB of RAM to run local video processing and AI models side by side. You&rsquo;d need to upgrade before applying.
                 </p>
               )}
             </div>
