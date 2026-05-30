@@ -179,7 +179,7 @@ export default function Waitlist() {
   const [ram, setRam] = useState(null)           // '16gb-plus' | 'under-16gb'
   const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai' | 'none'
 
-  const icpRejected = role === 'none'
+  const icpRejected = role === 'none' || platform === 'instagram'
   const icpComplete = role !== null && !icpRejected && platform !== null && monetise !== null
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -320,17 +320,22 @@ export default function Waitlist() {
                 />
                 <RadioCard
                   label="Instagram only"
-                  sublabel="Reels, carousels, stories — no YouTube yet"
+                  sublabel="Short-form only — no long-form YouTube"
                   selected={platform === 'instagram'}
-                  status={null}
+                  status={platform === 'instagram' ? 'rejected' : null}
                   onClick={() => { setPlatform('instagram'); trackStep(sessionId, 'platform', 'instagram') }}
                 />
               </div>
+              {platform === 'instagram' && (
+                <p style={rejectedMsgStyle}>
+                  Brand Gita is built around long-form YouTube — it edits your videos and repurposes them into short-form. If you don&rsquo;t have a YouTube channel yet, come back when you do.
+                </p>
+              )}
             </div>
           )}
 
           {/* Step 3: Monetisation */}
-          {role !== null && !icpRejected && platform !== null && (
+          {role !== null && !icpRejected && platform !== null && platform !== 'instagram' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Are you already making money from your content or expertise?" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
