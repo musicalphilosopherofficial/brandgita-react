@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Checkout from './Checkout'
 
 const COLORS = {
   ink: '#1A1A18',
@@ -214,18 +215,9 @@ export default function Waitlist() {
   }
 
   if (status === 'success') {
-    return (
-      <section style={sectionStyle}>
-        <div style={containerStyle}>
-          <p style={{ fontSize: '1.0625rem', fontWeight: 600, color: COLORS.ink, textAlign: 'center', marginBottom: '0.5rem' }}>
-            You&rsquo;re on the list.
-          </p>
-          <p style={{ fontSize: '0.9rem', color: COLORS.softText, textAlign: 'center', fontWeight: 300, lineHeight: 1.6, maxWidth: 360, margin: '0 auto' }}>
-            We&rsquo;ll reach out when founding creator access opens.
-          </p>
-        </div>
-      </section>
-    )
+    // Email captured. Run the smoke test: qualified applicants hit the
+    // founding-access checkout; clicking a payment method records intent.
+    return <Checkout email={email} name={name} />
   }
 
   return (
