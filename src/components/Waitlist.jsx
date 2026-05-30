@@ -162,7 +162,7 @@ export default function Waitlist() {
   const [mac, setMac] = useState(null)           // 'pro' | 'neo' | 'intel'
   const [winSetup, setWinSetup] = useState(null) // 'intel-nvidia' | 'amd-nvidia' | 'intel-qsv' | 'amd-unsupported'
   const [ram, setRam] = useState(null)           // '16gb-plus' | 'under-16gb'
-  const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai'
+  const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai' | 'none'
 
   const icpRejected = role === 'none'
   const icpComplete = role !== null && !icpRejected && platform !== null && monetise !== null
@@ -187,7 +187,7 @@ export default function Waitlist() {
   // Hardware fully complete: chip qualified + RAM meets minimum
   const hardwareComplete = chipQualified && ram !== null && ram !== 'under-16gb'
 
-  const aiComplete = ai !== null
+  const aiComplete = ai !== null && ai !== 'none'
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -503,37 +503,52 @@ export default function Waitlist() {
           {/* Step 8: AI — only shown when hardware is compatible */}
           {hardwareComplete && (
             <div style={{ marginBottom: '1.5rem' }}>
-              <StepLabel text="Which AI do you have access to?" />
+              <StepLabel text="Do you have an active AI subscription?" />
+              <p style={{ fontSize: '0.8rem', color: COLORS.softText, fontWeight: 300, lineHeight: 1.55, marginBottom: '0.75rem', marginTop: '-0.25rem' }}>
+                Brand Gita uses your own AI — you bring the key, we do the work.
+              </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
-                  label="Claude"
-                  sublabel="Minimum: Pro · Recommended: Max"
+                  label="Claude (Anthropic)"
+                  sublabel="Pro plan minimum · Max recommended"
                   selected={ai === 'claude'}
                   status={ai === 'claude' ? 'accepted' : null}
                   onClick={() => setAi('claude')}
                 />
                 <RadioCard
+                  label="ChatGPT / OpenAI"
+                  sublabel="ChatGPT Plus, GPT-4, or OpenAI API"
+                  selected={ai === 'openai'}
+                  status={ai === 'openai' ? 'accepted' : null}
+                  onClick={() => setAi('openai')}
+                />
+                <RadioCard
                   label="Google Gemini"
-                  sublabel="Free tier works · Recommended: Gemini Advanced"
+                  sublabel="Free tier works · Gemini Advanced recommended"
                   selected={ai === 'gemini'}
                   status={ai === 'gemini' ? 'accepted' : null}
                   onClick={() => setAi('gemini')}
                 />
                 <RadioCard
-                  label="Ollama"
-                  sublabel="Free — local AI running on your own machine"
+                  label="Ollama (local, free)"
+                  sublabel="AI running on your own machine — no subscription needed"
                   selected={ai === 'ollama'}
                   status={ai === 'ollama' ? 'accepted' : null}
                   onClick={() => setAi('ollama')}
                 />
                 <RadioCard
-                  label="ChatGPT / OpenAI"
-                  sublabel="ChatGPT, GPT-4, or OpenAI API"
-                  selected={ai === 'openai'}
-                  status={null}
-                  onClick={() => setAi('openai')}
+                  label="None — I don't have one"
+                  sublabel="I haven't signed up for an AI service yet"
+                  selected={ai === 'none'}
+                  status={ai === 'none' ? 'rejected' : null}
+                  onClick={() => setAi('none')}
                 />
               </div>
+              {ai === 'none' && (
+                <p style={rejectedMsgStyle}>
+                  Brand Gita requires your own AI subscription — it runs on your account, not ours. You&rsquo;ll need to sign up for Claude, ChatGPT, or Gemini (or run Ollama locally for free) before applying.
+                </p>
+              )}
             </div>
           )}
 
