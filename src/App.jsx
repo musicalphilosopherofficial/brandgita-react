@@ -6,6 +6,7 @@ import FounderQuote from './components/FounderQuote'
 import Comparison from './components/Comparison'
 import Footer from './components/Footer'
 import FAQ from './components/FAQ'
+import HowItWorks from './components/HowItWorks'
 
 function ApplyCTA() {
   return (
@@ -57,6 +58,11 @@ export default function App() {
       <Hero />
 
       <ApplyCTA />
+
+      <hr className="page-divider" />
+
+      <p className="section-label">How it works</p>
+      <HowItWorks />
 
       <hr className="page-divider" />
 
