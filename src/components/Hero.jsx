@@ -11,7 +11,7 @@ export default function Hero() {
         textAlign: 'center',
         marginBottom: '1rem',
       }}>
-        For entrepreneurs, coaches, and educators who show up on camera
+        For entrepreneurs, coaches, and educators who do YouTube
       </p>
 
       <h1 style={{
@@ -42,7 +42,7 @@ export default function Hero() {
         <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Hours of editing. Same generic look. No life, no flavour.</strong>
         <br /><br />
         Brand Gita runs a one-time brand interview — then every clip, carousel, and caption it produces sounds and looks like you — not like the tool.{' '}
-        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Your footage never leaves your machine.</strong>
+        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>No prompting. No templates. Just review and publish.</strong>
       </p>
     </section>
   )

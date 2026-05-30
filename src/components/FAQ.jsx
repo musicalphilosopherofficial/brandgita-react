@@ -1,15 +1,11 @@
 const faqs = [
   {
     q: 'Who is this for?',
-    a: "Entrepreneurs, coaches, and educators who teach or share expertise on camera. You have a point of view and a body of knowledge — and an audience that follows you for what you know, or one you're actively building online. If your content is meant to build trust and move people toward a decision, this is for you.",
+    a: "Entrepreneurs, coaches, and educators who do long-form YouTube — and find the whole production cycle exhausting. You've either spent hours editing yourself, handed it off to an editor who didn't quite get your style, or tried an AI tool that churned out something generic. The long-form edit drains you, and by the time it's done, repurposing it into Reels, Shorts, and carousels feels impossible. Brand Gita handles both — the long-form edit and the short-form repurposing — in your voice, not a template's.",
   },
   {
     q: 'Who is it not for?',
     a: "It's not for lifestyle vloggers, day-in-the-life creators, or anyone whose content is primarily entertainment. If you don't have a specific expertise or perspective you're trying to teach, Brand Gita doesn't have much to work with. It's also not for text-only content — it's built around video you recorded yourself.",
-  },
-  {
-    q: 'Does my footage stay on my machine?',
-    a: 'Yes. Brand Gita runs entirely on your device. Your video is never uploaded to any server — processing happens locally, and nothing leaves your machine unless you choose to publish.',
   },
   {
     q: 'Do you use your own AI or mine?',

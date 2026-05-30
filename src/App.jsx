@@ -25,13 +25,13 @@ function ApplyCTA() {
         color: '#1A1A18', textAlign: 'center', marginBottom: '0.5rem',
         letterSpacing: '-0.01em', lineHeight: 1.25,
       }}>
-        Get in early. Get in free.
+        Apply for founding access.
       </h2>
       <p style={{
         fontSize: '0.9rem', color: '#4A4842', textAlign: 'center',
         fontWeight: 300, lineHeight: 1.6, marginBottom: '1.5rem', maxWidth: 420,
       }}>
-        Early applicants get founding access — full product, no cost, in exchange for honest feedback.
+        A small group of founding creators get early access before public launch — in exchange for honest feedback.
       </p>
       <a
         href="/apply"

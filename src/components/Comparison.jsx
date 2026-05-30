@@ -56,7 +56,7 @@ export default function Comparison() {
           <ListItem><B>Batch record once</B>, publish for months</ListItem>
           <ListItem>Recommends what to post — <B>you always have the final say</B></ListItem>
           <ListItem>Clips, carousels, captions — <B>all on-brand</B></ListItem>
-          <ListItem><B>No manual uploads</B> — <B>auto schedules and publishes</B> from your machine</ListItem>
+          <ListItem><B>No manual uploads</B> — <B>auto schedules and publishes</B> to YouTube and Instagram</ListItem>
         </ul>
       </div>
 
@@ -68,7 +68,7 @@ export default function Comparison() {
         </p>
         <ul style={{ margin: 0, padding: 0 }}>
           <li style={{ fontSize: '0.8rem', fontWeight: 300, color: '#6E6B62', lineHeight: 1.5, padding: '0.28rem 0', listStyle: 'none' }}>
-            Your <B>footage lives on someone else's server</B>
+            <B>Generic output</B> — sounds like the tool, not like you
           </li>
           <ListItem><B>Hours of editing</B> — or hours of prompting — same result</ListItem>
           <ListItem>Output <B>sounds like everyone else</B> no matter what you try</ListItem>

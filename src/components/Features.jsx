@@ -12,7 +12,7 @@ const features = [
   },
   {
     title: 'Video processing',
-    desc: 'Sounds cleaner, looks better — processed on your machine.',
+    desc: 'Background noise removed, silences cut, audio cleaned up — ready to publish.',
   },
   {
     title: 'Short-form video',
