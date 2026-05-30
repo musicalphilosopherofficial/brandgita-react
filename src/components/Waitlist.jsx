@@ -1,5 +1,19 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Checkout from './Checkout'
+
+// Generate a random session ID once per page load — ties all step events together
+function makeSessionId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+// Fire-and-forget step tracker — never blocks the UI
+function trackStep(sessionId, step, value) {
+  try {
+    navigator.sendBeacon('/track', JSON.stringify({ session_id: sessionId, step, value }))
+  } catch {
+    /* best-effort — swallow silently */
+  }
+}
 
 const COLORS = {
   ink: '#1A1A18',
@@ -155,6 +169,7 @@ function HowToCheck({ steps }) {
 }
 
 export default function Waitlist() {
+  const sessionId = useRef(makeSessionId()).current
   const [role, setRole] = useState(null)       // 'expert' | 'entrepreneur' | 'none'
   const [platform, setPlatform] = useState(null) // 'youtube' | 'instagram' | 'both'
   const [monetise, setMonetise] = useState(null) // 'monetising' | 'building'
@@ -195,6 +210,7 @@ export default function Waitlist() {
     const hardware = getHardwareValue()
     setStatus('loading')
     setErrorMsg('')
+    trackStep(sessionId, 'submitted', email)
     try {
       const res = await fetch('/waitlist', {
         method: 'POST',
@@ -259,21 +275,21 @@ export default function Waitlist() {
                 sublabel="You teach or advise — courses, coaching, consulting, tutorials"
                 selected={role === 'expert'}
                 status={null}
-                onClick={() => setRole('expert')}
+                onClick={() => { setRole('expert'); trackStep(sessionId, 'role', 'expert') }}
               />
               <RadioCard
                 label="Entrepreneur or founder"
                 sublabel="Building a business around your personal brand and expertise"
                 selected={role === 'entrepreneur'}
                 status={null}
-                onClick={() => setRole('entrepreneur')}
+                onClick={() => { setRole('entrepreneur'); trackStep(sessionId, 'role', 'entrepreneur') }}
               />
               <RadioCard
                 label="None of these"
                 sublabel="I don't create content around my expertise"
                 selected={role === 'none'}
                 status={role === 'none' ? 'rejected' : null}
-                onClick={() => setRole('none')}
+                onClick={() => { setRole('none'); trackStep(sessionId, 'role', 'none') }}
               />
             </div>
             {icpRejected && (
@@ -293,21 +309,21 @@ export default function Waitlist() {
                   sublabel="Long-form video — tutorials, interviews, deep dives"
                   selected={platform === 'youtube'}
                   status={null}
-                  onClick={() => setPlatform('youtube')}
+                  onClick={() => { setPlatform('youtube'); trackStep(sessionId, 'platform', 'youtube') }}
                 />
                 <RadioCard
                   label="Both YouTube and Instagram"
                   sublabel="Long-form on YouTube, repurposed to Reels and carousels"
                   selected={platform === 'both'}
                   status={null}
-                  onClick={() => setPlatform('both')}
+                  onClick={() => { setPlatform('both'); trackStep(sessionId, 'platform', 'both') }}
                 />
                 <RadioCard
                   label="Instagram only"
                   sublabel="Reels, carousels, stories — no YouTube yet"
                   selected={platform === 'instagram'}
                   status={null}
-                  onClick={() => setPlatform('instagram')}
+                  onClick={() => { setPlatform('instagram'); trackStep(sessionId, 'platform', 'instagram') }}
                 />
               </div>
             </div>
@@ -323,14 +339,14 @@ export default function Waitlist() {
                   sublabel="Courses, coaching, consulting, community, or any paid product"
                   selected={monetise === 'monetising'}
                   status={null}
-                  onClick={() => setMonetise('monetising')}
+                  onClick={() => { setMonetise('monetising'); trackStep(sessionId, 'monetise', 'monetising') }}
                 />
                 <RadioCard
                   label="Not yet — building toward it"
                   sublabel="Growing my audience and developing my offer"
                   selected={monetise === 'building'}
                   status={null}
-                  onClick={() => setMonetise('building')}
+                  onClick={() => { setMonetise('building'); trackStep(sessionId, 'monetise', 'building') }}
                 />
               </div>
             </div>
@@ -345,13 +361,13 @@ export default function Waitlist() {
                 label="Mac"
                 selected={os === 'mac'}
                 status={null}
-                onClick={() => { setOs('mac'); setMac(null); setWinSetup(null); setRam(null); setAi(null) }}
+                onClick={() => { setOs('mac'); setMac(null); setWinSetup(null); setRam(null); setAi(null); trackStep(sessionId, 'os', 'mac') }}
               />
               <RadioCard
                 label="Windows"
                 selected={os === 'windows'}
                 status={null}
-                onClick={() => { setOs('windows'); setMac(null); setWinSetup(null); setRam(null); setAi(null) }}
+                onClick={() => { setOs('windows'); setMac(null); setWinSetup(null); setRam(null); setAi(null); trackStep(sessionId, 'os', 'windows') }}
               />
             </div>
           </div>
@@ -373,21 +389,21 @@ export default function Waitlist() {
                   sublabel="Apple M series chip"
                   selected={mac === 'pro'}
                   status={mac === 'pro' ? 'accepted' : null}
-                  onClick={() => { setMac('pro'); setRam(null); setAi(null) }}
+                  onClick={() => { setMac('pro'); setRam(null); setAi(null); trackStep(sessionId, 'mac', 'pro') }}
                 />
                 <RadioCard
                   label="Mac Neo"
                   sublabel="Apple A18 Pro chip — budget range"
                   selected={mac === 'neo'}
                   status={mac === 'neo' ? 'rejected' : null}
-                  onClick={() => { setMac('neo'); setRam(null); setAi(null) }}
+                  onClick={() => { setMac('neo'); setRam(null); setAi(null); trackStep(sessionId, 'mac', 'neo') }}
                 />
                 <RadioCard
                   label="Intel Mac"
                   sublabel="Any Mac with an Intel processor"
                   selected={mac === 'intel'}
                   status={mac === 'intel' ? 'rejected' : null}
-                  onClick={() => { setMac('intel'); setRam(null); setAi(null) }}
+                  onClick={() => { setMac('intel'); setRam(null); setAi(null); trackStep(sessionId, 'mac', 'intel') }}
                 />
               </div>
               {mac === 'neo' && (
@@ -420,28 +436,28 @@ export default function Waitlist() {
                   sublabel="Recommended RTX 3060 or newer · Intel 12th gen or newer recommended"
                   selected={winSetup === 'intel-nvidia'}
                   status={winSetup === 'intel-nvidia' ? 'accepted' : null}
-                  onClick={() => { setWinSetup('intel-nvidia'); setRam(null); setAi(null) }}
+                  onClick={() => { setWinSetup('intel-nvidia'); setRam(null); setAi(null); trackStep(sessionId, 'windows', 'intel-nvidia') }}
                 />
                 <RadioCard
                   label="AMD Ryzen 5, 7, or 9 + NVIDIA RTX"
                   sublabel="Recommended RTX 3060 or newer · Ryzen 5000 series or newer recommended"
                   selected={winSetup === 'amd-nvidia'}
                   status={winSetup === 'amd-nvidia' ? 'accepted' : null}
-                  onClick={() => { setWinSetup('amd-nvidia'); setRam(null); setAi(null) }}
+                  onClick={() => { setWinSetup('amd-nvidia'); setRam(null); setAi(null); trackStep(sessionId, 'windows', 'amd-nvidia') }}
                 />
                 <RadioCard
                   label="Intel Core i5, i7, or i9 — no NVIDIA GPU"
                   sublabel="No dedicated GPU, or with AMD Radeon — uses Intel Quick Sync (QSV)"
                   selected={winSetup === 'intel-qsv'}
                   status={winSetup === 'intel-qsv' ? 'accepted' : null}
-                  onClick={() => { setWinSetup('intel-qsv'); setRam(null); setAi(null) }}
+                  onClick={() => { setWinSetup('intel-qsv'); setRam(null); setAi(null); trackStep(sessionId, 'windows', 'intel-qsv') }}
                 />
                 <RadioCard
                   label="AMD Ryzen — no NVIDIA GPU"
                   sublabel="AMD Radeon or no dedicated GPU"
                   selected={winSetup === 'amd-unsupported'}
                   status={winSetup === 'amd-unsupported' ? 'rejected' : null}
-                  onClick={() => { setWinSetup('amd-unsupported'); setRam(null); setAi(null) }}
+                  onClick={() => { setWinSetup('amd-unsupported'); setRam(null); setAi(null); trackStep(sessionId, 'windows', 'amd-unsupported') }}
                 />
               </div>
               {winSetup === 'amd-unsupported' && (
@@ -469,13 +485,13 @@ export default function Waitlist() {
                   label="16 GB or more"
                   selected={ram === '16gb-plus'}
                   status={ram === '16gb-plus' ? 'accepted' : null}
-                  onClick={() => { setRam('16gb-plus'); setAi(null) }}
+                  onClick={() => { setRam('16gb-plus'); setAi(null); trackStep(sessionId, 'ram', '16gb-plus') }}
                 />
                 <RadioCard
                   label="Less than 16 GB"
                   selected={ram === 'under-16gb'}
                   status={ram === 'under-16gb' ? 'rejected' : null}
-                  onClick={() => { setRam('under-16gb'); setAi(null) }}
+                  onClick={() => { setRam('under-16gb'); setAi(null); trackStep(sessionId, 'ram', 'under-16gb') }}
                 />
               </div>
               {ram === 'under-16gb' && (
@@ -499,35 +515,35 @@ export default function Waitlist() {
                   sublabel="Pro plan minimum · Max recommended"
                   selected={ai === 'claude'}
                   status={ai === 'claude' ? 'accepted' : null}
-                  onClick={() => setAi('claude')}
+                  onClick={() => { setAi('claude'); trackStep(sessionId, 'ai', 'claude') }}
                 />
                 <RadioCard
                   label="ChatGPT / OpenAI"
                   sublabel="ChatGPT Plus, GPT-4, or OpenAI API"
                   selected={ai === 'openai'}
                   status={ai === 'openai' ? 'accepted' : null}
-                  onClick={() => setAi('openai')}
+                  onClick={() => { setAi('openai'); trackStep(sessionId, 'ai', 'openai') }}
                 />
                 <RadioCard
                   label="Google Gemini"
                   sublabel="Free tier works · Gemini Advanced recommended"
                   selected={ai === 'gemini'}
                   status={ai === 'gemini' ? 'accepted' : null}
-                  onClick={() => setAi('gemini')}
+                  onClick={() => { setAi('gemini'); trackStep(sessionId, 'ai', 'gemini') }}
                 />
                 <RadioCard
                   label="Ollama (local, free)"
                   sublabel="AI running on your own machine — no subscription needed"
                   selected={ai === 'ollama'}
                   status={ai === 'ollama' ? 'accepted' : null}
-                  onClick={() => setAi('ollama')}
+                  onClick={() => { setAi('ollama'); trackStep(sessionId, 'ai', 'ollama') }}
                 />
                 <RadioCard
                   label="None — I don't have one"
                   sublabel="I haven't signed up for an AI service yet"
                   selected={ai === 'none'}
                   status={ai === 'none' ? 'rejected' : null}
-                  onClick={() => setAi('none')}
+                  onClick={() => { setAi('none'); trackStep(sessionId, 'ai', 'none') }}
                 />
               </div>
               {ai === 'none' && (
