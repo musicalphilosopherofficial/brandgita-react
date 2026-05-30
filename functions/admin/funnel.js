@@ -1,6 +1,6 @@
 /**
  * GET /admin/funnel?secret=YOUR_EXPORT_SECRET
- * Returns funnel drop-off summary from funnel_events.
+ * Returns funnel drop-off summary + avg time per step from funnel_events.
  * Uses the same EXPORT_SECRET as /admin/export.
  */
 export async function onRequest(context) {
@@ -25,7 +25,7 @@ export async function onRequest(context) {
     ORDER BY visitors DESC
   `).all()
 
-  // Breakdown of what people selected per step
+  // Breakdown of what people selected per step (last answer only)
   const { results: breakdown } = await env.DB.prepare(`
     SELECT step, value, COUNT(DISTINCT session_id) AS count
     FROM funnel_events f1
@@ -37,19 +37,50 @@ export async function onRequest(context) {
     ORDER BY step, count DESC
   `).all()
 
+  // Avg seconds between first answer on step N and first answer on step N+1
+  // Uses first-seen timestamp per (session, step) pair
+  const { results: timings } = await env.DB.prepare(`
+    WITH first_seen AS (
+      SELECT session_id, step, MIN(ts) AS ts
+      FROM funnel_events
+      GROUP BY session_id, step
+    )
+    SELECT
+      a.step,
+      ROUND(AVG(
+        (julianday(b.ts) - julianday(a.ts)) * 86400
+      )) AS avg_seconds_to_next
+    FROM first_seen a
+    JOIN first_seen b
+      ON a.session_id = b.session_id
+    WHERE
+      (a.step = 'role'      AND b.step = 'platform')  OR
+      (a.step = 'platform'  AND b.step = 'monetise')  OR
+      (a.step = 'monetise'  AND b.step = 'os')        OR
+      (a.step = 'os'        AND b.step IN ('mac','windows')) OR
+      (a.step = 'mac'       AND b.step = 'ram')       OR
+      (a.step = 'windows'   AND b.step = 'ram')       OR
+      (a.step = 'ram'       AND b.step = 'ai')        OR
+      (a.step = 'ai'        AND b.step = 'submitted')
+    GROUP BY a.step
+  `).all()
+
   // Total unique sessions ever seen
   const { results: [{ total }] } = await env.DB.prepare(
     `SELECT COUNT(DISTINCT session_id) AS total FROM funnel_events`
   ).all()
 
-  // Group breakdown by step
+  // Index lookups
   const byStep = {}
   for (const row of breakdown) {
     if (!byStep[row.step]) byStep[row.step] = []
     byStep[row.step].push({ value: row.value, count: row.count })
   }
+  const timingByStep = {}
+  for (const row of timings) {
+    timingByStep[row.step] = row.avg_seconds_to_next
+  }
 
-  // Merge into a single ordered summary
   const STEP_ORDER = ['role', 'platform', 'monetise', 'os', 'mac', 'windows', 'ram', 'ai', 'submitted']
   const summary = STEP_ORDER
     .map(step => {
@@ -57,6 +88,7 @@ export async function onRequest(context) {
       return {
         step,
         visitors: row ? row.visitors : 0,
+        avg_seconds_on_step: timingByStep[step] ?? null,
         breakdown: byStep[step] || [],
       }
     })
