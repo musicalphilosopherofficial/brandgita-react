@@ -139,7 +139,7 @@ export default function Checkout({ email, name }) {
               'Early access before public launch',
               'Everything happens in front of you — no black box',
               'A direct line to shape what we build',
-              'Founding price locked — it never goes up',
+              'Half price for life — all we ask is honest feedback',
             ].map((item, i) => (
               <li key={i} style={liStyle}>
                 <span style={checkStyle}>✓</span>

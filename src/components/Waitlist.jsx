@@ -393,7 +393,7 @@ export default function Waitlist() {
                 '① Click the Apple  menu (top-left) → About This Mac.',
                 '② Look for the "Chip" line. If it says M1, M2, M3, or M4 — you\'re compatible.',
                 '③ If it says "Intel Core" → Intel Macs are not supported. Brand Gita requires Apple Silicon.',
-                '④ Mac Neo (budget range) is also not supported — it doesn\'t have enough processing power for local video rendering.',
+                '④ Mac Neo (budget range) is also not supported — it uses an A18 Pro chip (Apple\'s iPhone processor), which doesn\'t have enough processing power for local video rendering.',
               ]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
@@ -405,7 +405,7 @@ export default function Waitlist() {
                 />
                 <RadioCard
                   label="Mac Neo"
-                  sublabel="Apple M series chip — budget range"
+                  sublabel="Apple A18 Pro chip — budget range"
                   selected={mac === 'neo'}
                   status={mac === 'neo' ? 'rejected' : null}
                   onClick={() => { setMac('neo'); setRam(null); setAi(null) }}
@@ -420,7 +420,7 @@ export default function Waitlist() {
               </div>
               {mac === 'neo' && (
                 <p style={rejectedMsgStyle}>
-                  The Mac Neo is a budget-range machine not suited for the heavy local video processing Brand Gita requires. You&rsquo;d need a MacBook Air or Pro (M series) at minimum.
+                  The Mac Neo uses an A18 Pro chip (Apple&rsquo;s iPhone processor) — not suited for the heavy local video processing Brand Gita requires. You&rsquo;d need a MacBook Air or Pro (M series) at minimum.
                 </p>
               )}
               {mac === 'intel' && (
