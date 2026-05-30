@@ -27,9 +27,7 @@ const faqs = [
     q: 'When can I get access?',
     a: (
       <>
-        Founding creator applications are opening soon — spots are limited.{' '}
-        <a href="mailto:support@brandgita.com" style={{ color: '#2196F3' }}>Get in touch</a>{' '}
-        if you want to be considered early.
+        <a href="/apply" style={{ color: '#2196F3' }}>Apply for founding access →</a>
       </>
     ),
   },
