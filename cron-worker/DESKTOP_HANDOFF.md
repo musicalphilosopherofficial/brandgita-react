@@ -19,7 +19,7 @@ need to be awake at post time — Cloudflare posts on schedule.
 - All responses are JSON shaped `{ ok: true, ... }` or `{ ok: false, error: "..." }`.
 
 ## What's already built (cloud side — do not rebuild)
-- R2 bucket `brandgita-scheduled` (Oceania region, objects auto-deleted after 45 days)
+- R2 bucket `brandgita-scheduled` (Oceania region, objects auto-deleted after 75 days)
 - D1 tables `ig_tokens` (IG token encrypted at rest; desktop_token stored hashed) and `scheduled_posts`
 - Cron Worker `brandgita-cron-poster` — runs every minute, posts due content, handles
   retries (5 attempts) and auto-refreshes IG tokens expiring within 7 days
@@ -90,7 +90,7 @@ Header: `Authorization: Bearer`. **No `ig_user_id` in the body** — it's derive
   "asset_keys": ["{ig_user_id}/reel/abc.mp4"],   // reel: exactly 1; carousel: 2–10
   "cover_key": "{ig_user_id}/cover/abc.jpg",     // optional, reel cover only
   "caption": "...",                       // ≤ 2200 chars
-  "post_at": "2026-06-15T10:00:00Z"       // ISO 8601 UTC, ≤ 30 days ahead
+  "post_at": "2026-06-15T10:00:00Z"       // ISO 8601 UTC, ≤ 60 days ahead
 }
 ```
 → `{ ok: true, id }`  (409 if `id` exists; 403 if a key isn't yours; 400 on bounds)
@@ -136,7 +136,7 @@ scheme is hijackable by another local app (a security audit flagged this as Crit
   desktop token aged out → re-run OAuth.
 
 ## Constraints (enforced server-side)
-- **Max scheduling window: 30 days ahead** (R2 auto-deletes assets after 45 days).
+- **Max scheduling window: 60 days ahead** (R2 auto-deletes assets after 75 days).
 - Reel: exactly 1 video (+ optional cover). Carousel: 2–10 images.
 - Caption ≤ 2200 chars. Upload ≤ 600 MB. Content-Type: mp4/mov/jpeg/png only.
 - Asset keys must be under YOUR `{ig_user_id}/` prefix and match the key-shape regex.
