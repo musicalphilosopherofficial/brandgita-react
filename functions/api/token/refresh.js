@@ -1,4 +1,5 @@
 import { requireUserAuth } from '../_auth.js';
+import { encryptToken, decryptToken } from '../_crypto.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -46,11 +47,20 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'No token found' }, 404);
   }
 
+  // Decrypt the stored token before handing it to Meta's refresh endpoint.
+  let currentToken;
+  try {
+    currentToken = await decryptToken(row.access_token, env);
+  } catch (err) {
+    console.error('Token decrypt failed (refresh):', { message: err?.message });
+    return json({ ok: false, error: 'Could not read stored token' }, 500);
+  }
+
   let igData;
   try {
     const refreshUrl = new URL('https://graph.instagram.com/refresh_access_token');
     refreshUrl.searchParams.set('grant_type', 'ig_refresh_token');
-    refreshUrl.searchParams.set('access_token', row.access_token);
+    refreshUrl.searchParams.set('access_token', currentToken);
 
     const igRes = await fetch(refreshUrl.toString());
     igData = await igRes.json();
@@ -68,6 +78,7 @@ export async function onRequest(context) {
   const { access_token, expires_in } = igData;
   const token_expiry = new Date(Date.now() + expires_in * 1000).toISOString();
   const updated_at = new Date().toISOString();
+  const access_token_enc = await encryptToken(access_token, env);
 
   // UPDATE only the token fields — must NOT touch desktop_token/desktop_token_created_at.
   // (The previous INSERT OR REPLACE wiped the desktop bearer token to NULL on every
@@ -75,7 +86,7 @@ export async function onRequest(context) {
   try {
     await env.DB.prepare(
       `UPDATE ig_tokens SET access_token = ?, token_expiry = ?, updated_at = ? WHERE ig_user_id = ?`
-    ).bind(access_token, token_expiry, updated_at, ig_user_id).run();
+    ).bind(access_token_enc, token_expiry, updated_at, ig_user_id).run();
   } catch (err) {
     console.error('D1 update error (ig_tokens) on refresh:', { message: err?.message });
     return json({ ok: false, error: 'Could not store refreshed token' }, 500);

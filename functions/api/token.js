@@ -1,4 +1,5 @@
 import { sha256Hex, requireUserAuth } from './_auth.js';
+import { encryptToken } from './_crypto.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -130,12 +131,16 @@ export async function onRequest(context) {
   const desktop_token_hash = await sha256Hex(desktop_token);
   const desktop_token_created_at = new Date().toISOString();
 
+  // Encrypt the IG access token at rest (AES-256-GCM). A D1 read alone can't yield
+  // a usable publish-capable token without TOKEN_ENC_KEY.
+  const access_token_enc = await encryptToken(access_token, env);
+
   try {
     await env.DB.prepare(
       `INSERT OR REPLACE INTO ig_tokens
          (ig_user_id, access_token, token_expiry, updated_at, desktop_token, desktop_token_created_at)
        VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(ig_user_id, access_token, token_expiry, updated_at, desktop_token_hash, desktop_token_created_at).run();
+    ).bind(ig_user_id, access_token_enc, token_expiry, updated_at, desktop_token_hash, desktop_token_created_at).run();
   } catch (err) {
     console.error('D1 upsert error (ig_tokens):', { message: err?.message });
     return json({ ok: false, error: 'Could not store token' }, 500);

@@ -23,6 +23,8 @@
 //     fail immediately with error 'TOKEN_EXPIRED' so the desktop app can prompt
 //     a reconnect.
 
+import { encryptToken, decryptToken } from './_crypto.js';
+
 const GRAPH_BASE = 'https://graph.instagram.com/v21.0';
 const MEDIA_BASE = 'https://brandgita.com/api/media';
 
@@ -302,7 +304,16 @@ async function processPost(env, post) {
     await markFailed(env, post.id, 'No token for user');
     return;
   }
-  const accessToken = tokenRow.access_token;
+
+  // Decrypt the IG access token before presenting it to Meta.
+  let accessToken;
+  try {
+    accessToken = await decryptToken(tokenRow.access_token, env);
+  } catch (err) {
+    console.error(`Token decrypt failed for post ${post.id}:`, { message: err?.message });
+    await handleRetryableFailure(env, post, 'Token decrypt failed');
+    return;
+  }
 
   // Parse the JSON array of R2 keys.
   let assetKeys;
@@ -362,9 +373,11 @@ async function refreshExpiringTokens(env) {
 
   for (const row of rows) {
     try {
+      const currentToken = await decryptToken(row.access_token, env);
+
       const url = new URL('https://graph.instagram.com/refresh_access_token');
       url.searchParams.set('grant_type', 'ig_refresh_token');
-      url.searchParams.set('access_token', row.access_token);
+      url.searchParams.set('access_token', currentToken);
 
       const res = await fetch(url.toString());
       const data = await res.json();
@@ -377,9 +390,10 @@ async function refreshExpiringTokens(env) {
 
       // expires_in is in seconds (typically ~60 days for IG long-lived tokens).
       const expiryIso = new Date(Date.now() + (data.expires_in || 0) * 1000).toISOString();
+      const encrypted = await encryptToken(data.access_token, env);
       await env.DB.prepare(
         `UPDATE ig_tokens SET access_token = ?, token_expiry = ?, updated_at = ? WHERE ig_user_id = ?`
-      ).bind(data.access_token, expiryIso, nowIso(), row.ig_user_id).run();
+      ).bind(encrypted, expiryIso, nowIso(), row.ig_user_id).run();
 
       console.log(`Refreshed token for ${row.ig_user_id}, new expiry ${expiryIso}`);
     } catch (err) {

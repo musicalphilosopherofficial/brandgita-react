@@ -20,9 +20,16 @@ export async function onRequest(context) {
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
+  // Validate and pass through the range param. Whitelist here mirrors funnel.js —
+  // if the value is invalid funnel.js will 400, which we surface gracefully below.
+  const VALID_RANGES = ['day', 'week', 'month', 'all']
+  const rangeParam = url.searchParams.get('range') ?? 'all'
+  const range = VALID_RANGES.includes(rangeParam) ? rangeParam : 'all'
+
   // Fetch funnel data internally. Pass the secret in the Basic Auth HEADER, never
   // the query string (query strings leak into logs/history/Referer).
   const funnelUrl = new URL('/admin/funnel', url.origin)
+  funnelUrl.searchParams.set('range', range)
   const basic = 'Basic ' + btoa('admin:' + env.EXPORT_SECRET)
   const funnelRes = await fetch(funnelUrl.toString(), { headers: { Authorization: basic } })
   const data = await funnelRes.json()
@@ -86,6 +93,12 @@ export async function onRequest(context) {
     ? Math.round(((funnel.find(s => s.step === 'submitted')?.visitors || 0) / total_sessions) * 100)
     : 0
 
+  const RANGE_LABELS = { day: 'Today', week: '7 days', month: '30 days', all: 'All time' }
+  const rangeLabel = RANGE_LABELS[range]
+  const rangeNav = ['day', 'week', 'month', 'all'].map(r =>
+    `<a href="/admin/dashboard?range=${r}" class="${r === range ? 'active' : ''}">${RANGE_LABELS[r]}</a>`
+  ).join('')
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -118,17 +131,24 @@ export async function onRequest(context) {
   .tag { font-size: 0.72rem; background: #F0EDE6; border: 1px solid #D4CFC4; border-radius: 4px; padding: 2px 7px; color: #4A4842; }
   .tag b { color: #1A1A18; }
   .refresh { font-size: 0.75rem; color: #9B9789; margin-top: 1.5rem; text-align: right; }
+  .range-nav { display: flex; gap: 0; margin-bottom: 1.75rem; border: 1px solid #D4CFC4; border-radius: 8px; overflow: hidden; width: fit-content; }
+  .range-nav a { display: inline-block; padding: 0.45rem 1rem; font-size: 0.8rem; font-weight: 500; color: #4A4842; text-decoration: none; background: #fff; border-right: 1px solid #D4CFC4; }
+  .range-nav a:last-child { border-right: none; }
+  .range-nav a:hover { background: #F0EDE6; }
+  .range-nav a.active { background: #2196F3; color: #fff; font-weight: 700; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Waitlist Funnel</h1>
-  <p class="subtitle">Brand Gita · live data · <a href="/admin/dashboard" style="color:#2196F3">refresh</a></p>
+  <p class="subtitle">Brand Gita · ${rangeLabel} · <a href="/admin/dashboard?range=${range}" style="color:#2196F3">refresh</a></p>
+
+  <nav class="range-nav">${rangeNav}</nav>
 
   <div class="kpi-row">
     <div class="kpi">
       <div class="kpi-val">${total_sessions.toLocaleString()}</div>
-      <div class="kpi-label">Total sessions started</div>
+      <div class="kpi-label">Sessions started · ${rangeLabel}</div>
     </div>
     <div class="kpi">
       <div class="kpi-val">${funnel.find(s => s.step === 'submitted')?.visitors ?? 0}</div>

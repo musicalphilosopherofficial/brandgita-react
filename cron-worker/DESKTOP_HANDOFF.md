@@ -4,19 +4,28 @@ The cloud backend for Instagram scheduling is **built and live**. This document 
 the contract for the desktop app to interface with it. The desktop app does NOT
 need to be awake at post time — Cloudflare posts on schedule.
 
-## Base URL & Auth
+## Base URL & Auth (UPDATED — per-user bearer tokens)
 - **Base URL:** `https://brandgita.com`
-- **Auth:** every endpoint except `GET /api/media/*` requires header
-  `x-api-secret: <API_SECRET>` (value is in `.dev.vars` / Cloudflare Pages env).
+- **Two-phase auth:**
+  1. **Bootstrap:** `POST /api/token` (the OAuth exchange) is the ONLY endpoint that
+     uses the shared header `x-api-secret: <API_SECRET>`. It returns a per-user
+     `desktop_token`.
+  2. **Everything else:** send `Authorization: Bearer <desktop_token>` — NOT the
+     shared secret. The cloud resolves the token to the user, so every call is
+     automatically scoped to that user's own data.
+- **Store the `desktop_token` in Electron `safeStorage`** (encrypted, OS-keychain-backed).
+  It is shown to you exactly once in the `POST /api/token` response and never again.
+- The desktop_token **expires after 90 days** → the user must reconnect (re-run OAuth).
 - All responses are JSON shaped `{ ok: true, ... }` or `{ ok: false, error: "..." }`.
 
 ## What's already built (cloud side — do not rebuild)
 - R2 bucket `brandgita-scheduled` (Oceania region, objects auto-deleted after 45 days)
-- D1 tables `ig_tokens` and `scheduled_posts`
+- D1 tables `ig_tokens` (IG token encrypted at rest; desktop_token stored hashed) and `scheduled_posts`
 - Cron Worker `brandgita-cron-poster` — runs every minute, posts due content, handles
   retries (5 attempts) and auto-refreshes IG tokens expiring within 7 days
-- All 8 HTTP endpoints below
-- Secrets set in Cloudflare: `IG_CLIENT_ID`, `IG_CLIENT_SECRET`, `IG_REDIRECT_URI`, `API_SECRET`
+- All HTTP endpoints below
+- Secrets set in Cloudflare: `IG_CLIENT_ID`, `IG_CLIENT_SECRET`, `IG_REDIRECT_URI`,
+  `API_SECRET`, `TOKEN_ENC_KEY`
 
 ## What the desktop app must build
 1. Instagram OAuth flow (see "Token flow" below)
@@ -38,75 +47,97 @@ One shared bucket, per-user **key prefixes**. Always prefix keys with the IG use
 
 ## Endpoints
 
-### 1. POST /api/token  — store a long-lived IG token
-Body: `{ "ig_user_id": "...", "short_lived_token": "..." }`
+> Auth column: **🔑 = `x-api-secret`** (bootstrap only) · **🎫 = `Authorization: Bearer <desktop_token>`** · **none**
+
+### 1. 🔑 POST /api/token  — OAuth exchange + mint desktop token
+Header: `x-api-secret`. Body (preferred): `{ "code": "<oauth code from redirect>" }`
+→ `{ ok: true, ig_user_id, username, desktop_token, expires_in_days: 60 }`
+The cloud does the full `code → short-lived → long-lived` exchange server-side (the
+`IG_CLIENT_SECRET` never leaves Cloudflare) and mints the `desktop_token`.
+**Save `desktop_token` to safeStorage — it's returned only here.**
+
+### 1b. 🎫 DELETE /api/token  — revoke (logout / disconnect)
+Header: `Authorization: Bearer <desktop_token>` → `{ ok: true, revoked: true }`
+Invalidates the desktop token immediately. Call on logout / disconnect-account.
+
+### 2. 🎫 POST /api/token/refresh  — manually refresh the IG token
+Header: `Authorization: Bearer`. No body needed (user derived from token).
 → `{ ok: true, expires_in_days: 60 }`
-Exchanges the short-lived token for a 60-day long-lived token and stores it.
+(The cron auto-refreshes within 7 days of expiry, so the desktop rarely needs this.)
 
-### 2. POST /api/token/refresh  — manually refresh a token
-Body: `{ "ig_user_id": "..." }` → `{ ok: true, expires_in_days: 60 }`
-(The cron auto-refreshes tokens within 7 days of expiry, so the desktop rarely needs this.)
-
-### 3. POST /api/upload-url  — get upload URLs for assets
-Body: `{ "keys": ["{ig_user_id}/reel/abc.mp4", "{ig_user_id}/cover/abc.jpg"] }`
+### 3. 🎫 POST /api/upload-url  — get upload URLs for assets
+Header: `Authorization: Bearer`. Body: `{ "keys": ["{ig_user_id}/reel/abc.mp4", ...] }`
 → `{ ok: true, uploads: [{ key, upload_url }] }`
+All keys MUST start with your own `{ig_user_id}/` prefix (403 otherwise).
 
-### 4. PUT {upload_url}  — upload one asset to R2
-PUT the raw file bytes to each `upload_url` from step 3.
-Headers: `x-api-secret`, `Content-Type: video/mp4` (or `image/jpeg`).
-→ `{ ok: true, key }`
+### 4. 🎫 PUT {upload_url}  — upload one asset to R2
+PUT raw file bytes to each `upload_url` from step 3.
+Headers: `Authorization: Bearer`, `Content-Type` — must be one of:
+`video/mp4`, `video/quicktime`, `image/jpeg`, `image/png` (415 otherwise).
+Max **600 MB** per object (413 otherwise). → `{ ok: true, key }`
 
-### 5. GET /api/media/{key}  — serve an asset (NO AUTH)
-This is the public URL Meta fetches from at post time. The desktop generally doesn't
-call this; it exists so the cron worker can hand Meta a public URL.
+### 5. none — GET /api/media/{key}  — serve an asset
+The public URL Meta fetches at post time. The desktop doesn't call this. Keys must
+match `^[0-9]+/(reel|cover|carousel)/[A-Za-z0-9._-]+\.(mp4|mov|jpg|jpeg|png)$`.
+**Use a random v4 UUID in the filename** — the key's unguessability is its access control.
 
-### 6. POST /api/schedule  — create a scheduled post
-Body:
+### 6. 🎫 POST /api/schedule  — create a scheduled post
+Header: `Authorization: Bearer`. **No `ig_user_id` in the body** — it's derived from the token.
 ```json
 {
   "id": "<uuid generated by desktop>",
-  "ig_user_id": "...",
   "type": "reel",                         // "reel" | "carousel"
-  "asset_keys": ["{ig_user_id}/reel/abc.mp4"],   // 1 for reel, 2–10 for carousel
+  "asset_keys": ["{ig_user_id}/reel/abc.mp4"],   // reel: exactly 1; carousel: 2–10
   "cover_key": "{ig_user_id}/cover/abc.jpg",     // optional, reel cover only
-  "caption": "...",
-  "post_at": "2026-06-15T10:00:00Z"       // ISO 8601 UTC
+  "caption": "...",                       // ≤ 2200 chars
+  "post_at": "2026-06-15T10:00:00Z"       // ISO 8601 UTC, ≤ 30 days ahead
 }
 ```
-→ `{ ok: true, id }`  (409 if `id` already exists)
+→ `{ ok: true, id }`  (409 if `id` exists; 403 if a key isn't yours; 400 on bounds)
 **Upload all assets (steps 3–4) BEFORE calling this**, so the keys exist when the cron fires.
 
-### 7. GET /api/schedule?ig_user_id=...  — list a user's posts (calendar)
+### 7. 🎫 GET /api/schedule  — list YOUR posts (calendar)
+Header: `Authorization: Bearer`. **No `?ig_user_id=` param** — scoped to the token.
 → `{ ok: true, posts: [{ id, type, post_at, status, permalink, error, caption }] }`
 `status` ∈ `scheduled | posting | posted | failed`. Ordered by `post_at` ascending.
 
-### 8. DELETE /api/schedule/{id}  — cancel a scheduled post
-→ `{ ok: true }`  (also deletes the R2 assets)
-Returns 400 if the post is no longer `scheduled` (i.e. already posting/posted/failed).
+### 8. 🎫 DELETE /api/schedule/{id}  — cancel a scheduled post
+Header: `Authorization: Bearer` → `{ ok: true }` (also deletes the R2 assets).
+404 if the post isn't yours; 400 if it's no longer `scheduled`.
 
 ---
 
 ## Token flow (OAuth)
 1. Desktop opens the IG OAuth authorize URL (uses `IG_CLIENT_ID` + `IG_REDIRECT_URI`).
-2. After the user authorizes, IG redirects to the redirect URI with `?code=...`.
-   `functions/oauth/instagram.js` 302-redirects that to the custom scheme
-   `brandgita://oauth/instagram?code=...` for the desktop app to capture.
-3. **⚠️ OPEN DECISION — who exchanges `code` → short-lived token?**
-   That exchange needs `IG_CLIENT_SECRET`, which must NOT be embedded in a distributed
-   desktop app. **Recommended:** add a cloud endpoint (or extend `POST /api/token` to
-   accept `code` instead of `short_lived_token`) so the exchange happens server-side and
-   the secret stays in Cloudflare. Decide this first — the current `/api/token` assumes
-   the caller already holds a `short_lived_token`.
-4. Once exchanged + stored via `/api/token`, the cron keeps the token fresh automatically.
+2. After the user authorizes, IG redirects with `?code=...`; `functions/oauth/instagram.js`
+   302-redirects to `brandgita://oauth/instagram?code=...` for the desktop to capture.
+3. Desktop POSTs `{ code }` to `🔑 POST /api/token`. The cloud does the full server-side
+   exchange and returns `{ ig_user_id, username, desktop_token, ... }`.
+4. Desktop saves `desktop_token` to safeStorage and uses `Authorization: Bearer` from then on.
+5. The cron keeps the underlying IG token fresh automatically.
+
+### ⚠️ SECURITY TODO before public launch (desktop-side, REQUIRED)
+The OAuth flow currently has **no `state` and no PKCE**, and the `brandgita://` custom
+scheme is hijackable by another local app (a security audit flagged this as Critical):
+- **Add a `state` param:** generate `state = crypto.randomUUID()` before opening the
+  browser, pass it on the authorize URL, and REFUSE the deep-link callback if the
+  returned `state` doesn't match. (`oauth/instagram.js` will echo `state` back.)
+- **Add PKCE (RFC 7636):** generate a `code_verifier`, send its `code_challenge` on the
+  authorize request, and include the `code_verifier` when POSTing to `/api/token`
+  (the cloud forwards it to Meta). A stolen `code` is then useless.
+- Prefer a **loopback redirect** (`http://127.0.0.1:<port>`) over the custom scheme where
+  the platform allows it — loopback can't be claimed by another app.
 
 ## Status / reconnect handling
-- Poll `GET /api/schedule?ig_user_id=...` to drive the calendar.
+- Poll `🎫 GET /api/schedule` to drive the calendar.
 - When a post's `status` is `failed` and `error` is `TOKEN_EXPIRED`, prompt the user to
   reconnect Instagram (re-run OAuth → `/api/token`), then they can reschedule.
+- A `401` with "Token expired — please reconnect" on any bearer call means the 90-day
+  desktop token aged out → re-run OAuth.
 
-## Constraints
-- **Max scheduling window: 30 days ahead.** R2 auto-deletes assets after 45 days; the app
-  MUST cap scheduling at ≤30 days so an asset never expires before its post fires.
+## Constraints (enforced server-side)
+- **Max scheduling window: 30 days ahead** (R2 auto-deletes assets after 45 days).
 - Reel: exactly 1 video (+ optional cover). Carousel: 2–10 images.
-- `post_at`: ISO 8601 UTC.
-- `id`: desktop generates a fresh UUID per post.
+- Caption ≤ 2200 chars. Upload ≤ 600 MB. Content-Type: mp4/mov/jpeg/png only.
+- Asset keys must be under YOUR `{ig_user_id}/` prefix and match the key-shape regex.
+- `post_at`: ISO 8601 UTC. `id`: desktop generates a fresh v4 UUID per post.
