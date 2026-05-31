@@ -6,3 +6,10 @@ pages_build_output_dir = "dist"
 binding = "DB"
 database_name = "brandgita-waitlist"
 database_id = "c0c56a08-861b-402b-813d-cd8734e8977a"
+
+[[r2_buckets]]
+binding = "SCHEDULE_BUCKET"
+bucket_name = "brandgita-scheduled"
+
+[triggers]
+crons = ["* * * * *"]
