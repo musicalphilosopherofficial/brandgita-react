@@ -34,13 +34,51 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Invalid JSON' }, 400);
   }
 
-  const { ig_user_id, short_lived_token } = body;
+  // Two accepted shapes:
+  //   { code }                            — full OAuth exchange (desktop sends this)
+  //   { ig_user_id, short_lived_token }   — legacy: caller already holds a short-lived token
+  const { code } = body;
+  let { ig_user_id, short_lived_token } = body;
 
-  if (!ig_user_id || !short_lived_token) {
-    return json({ ok: false, error: 'ig_user_id and short_lived_token are required' }, 400);
+  // Step 0 (code path only): trade the one-time OAuth code for a short-lived token.
+  // This needs IG_CLIENT_SECRET, which is why it MUST happen server-side and never
+  // in the distributed desktop app. The code-exchange response also tells us who
+  // logged in (user_id), so the desktop doesn't need to know ig_user_id up front.
+  if (code) {
+    try {
+      const form = new URLSearchParams();
+      form.set('client_id', env.IG_CLIENT_ID);
+      form.set('client_secret', env.IG_CLIENT_SECRET);
+      form.set('grant_type', 'authorization_code');
+      form.set('redirect_uri', env.IG_REDIRECT_URI);
+      form.set('code', code);
+
+      const codeRes = await fetch('https://api.instagram.com/oauth/access_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form,
+      });
+      const codeData = await codeRes.json();
+
+      if (!codeRes.ok || !codeData.access_token || !codeData.user_id) {
+        console.error('IG code exchange error:', codeData);
+        const errMsg = codeData?.error_message || codeData?.error?.message || 'OAuth code exchange failed';
+        return json({ ok: false, error: errMsg }, 502);
+      }
+
+      short_lived_token = codeData.access_token;
+      ig_user_id = String(codeData.user_id);
+    } catch (err) {
+      console.error('Fetch error during IG code exchange:', err);
+      return json({ ok: false, error: 'Failed to reach Instagram during code exchange' }, 502);
+    }
   }
 
-  // Exchange short-lived token for a long-lived token via Instagram Graph API
+  if (!ig_user_id || !short_lived_token) {
+    return json({ ok: false, error: 'Provide either {code} or {ig_user_id, short_lived_token}' }, 400);
+  }
+
+  // Exchange short-lived token for a long-lived (60-day) token via Instagram Graph API
   let igData;
   try {
     const exchangeUrl = new URL('https://graph.instagram.com/access_token');
@@ -76,5 +114,6 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Could not store token' }, 500);
   }
 
-  return json({ ok: true, expires_in_days: Math.floor(expires_in / 86400) });
+  // Return ig_user_id so the desktop (code path) learns who just connected.
+  return json({ ok: true, ig_user_id, expires_in_days: Math.floor(expires_in / 86400) });
 }
