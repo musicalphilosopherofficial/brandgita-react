@@ -66,7 +66,12 @@ export async function onRequest(context) {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=3600',
+        // no-store: never cache user video at Cloudflare edges. Keeps the asset
+        // resident only in the Oceania R2 bucket and makes the privacy policy's
+        // "deleted immediately after publish" promise literally true (no stale
+        // edge copy can outlive the R2 deletion). Meta fetches each asset once
+        // at post time, so caching offers no benefit here.
+        'Cache-Control': 'private, no-store',
         'Access-Control-Allow-Origin': '*',
       },
     });
