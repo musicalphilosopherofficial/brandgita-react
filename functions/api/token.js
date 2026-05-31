@@ -114,6 +114,24 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Could not store token' }, 500);
   }
 
-  // Return ig_user_id so the desktop (code path) learns who just connected.
-  return json({ ok: true, ig_user_id, expires_in_days: Math.floor(expires_in / 86400) });
+  // Fetch the handle for display. Non-fatal: the connection is already stored, so a
+  // failed username lookup must not fail the whole call — the desktop just shows no @handle.
+  let username = null;
+  try {
+    const meUrl = new URL('https://graph.instagram.com/v22.0/me');
+    meUrl.searchParams.set('fields', 'username');
+    meUrl.searchParams.set('access_token', access_token);
+    const meRes = await fetch(meUrl.toString());
+    if (meRes.ok) {
+      const me = await meRes.json();
+      username = me.username || null;
+    } else {
+      console.error('IG username fetch non-OK:', meRes.status);
+    }
+  } catch (err) {
+    console.error('IG username fetch failed (non-fatal):', err);
+  }
+
+  // Return ig_user_id + username so the desktop (code path) learns who just connected.
+  return json({ ok: true, ig_user_id, username, expires_in_days: Math.floor(expires_in / 86400) });
 }

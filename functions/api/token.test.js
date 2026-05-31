@@ -48,10 +48,13 @@ function mockFetch(handlers) {
 
 test('code path: exchanges code → short-lived → long-lived, returns ig_user_id', async () => {
   const seen = [];
-  globalThis.fetch = async (url, opts) => {
+  globalThis.fetch = async (url) => {
     seen.push(String(url));
     if (String(url).includes('api.instagram.com/oauth/access_token')) {
       return { ok: true, json: async () => ({ access_token: 'short-tok', user_id: 178414 }) };
+    }
+    if (String(url).includes('graph.instagram.com/v22.0/me')) {
+      return { ok: true, json: async () => ({ username: 'creator.handle' }) };
     }
     if (String(url).includes('graph.instagram.com/access_token')) {
       return { ok: true, json: async () => ({ access_token: 'long-tok', expires_in: 5184000 }) };
@@ -66,6 +69,7 @@ test('code path: exchanges code → short-lived → long-lived, returns ig_user_
   assert.equal(res.status, 200);
   assert.equal(data.ok, true);
   assert.equal(data.ig_user_id, '178414');           // derived from code exchange, returned to desktop
+  assert.equal(data.username, 'creator.handle');      // fetched for display
   assert.equal(data.expires_in_days, 60);
   assert.ok(seen[0].includes('api.instagram.com/oauth/access_token')); // code → short first
   assert.ok(seen[1].includes('graph.instagram.com/access_token'));     // short → long second
@@ -77,6 +81,9 @@ test('legacy path: {ig_user_id, short_lived_token} skips code exchange', async (
   const seen = [];
   globalThis.fetch = async (url) => {
     seen.push(String(url));
+    if (String(url).includes('graph.instagram.com/v22.0/me')) {
+      return { ok: true, json: async () => ({ username: 'legacy.handle' }) };
+    }
     return { ok: true, json: async () => ({ access_token: 'long-tok', expires_in: 5184000 }) };
   };
 
@@ -85,8 +92,8 @@ test('legacy path: {ig_user_id, short_lived_token} skips code exchange', async (
 
   assert.equal(data.ok, true);
   assert.equal(data.ig_user_id, '999');
-  assert.equal(seen.length, 1);                                   // only the long-lived exchange
-  assert.ok(seen[0].includes('graph.instagram.com/access_token'));
+  assert.ok(seen.some(u => u.includes('graph.instagram.com/access_token'))); // long-lived exchange ran
+  assert.ok(!seen.some(u => u.includes('api.instagram.com/oauth/access_token'))); // no code exchange
 });
 
 test('missing both code and short_lived_token → 400', async () => {
