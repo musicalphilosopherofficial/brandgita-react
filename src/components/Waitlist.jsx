@@ -553,9 +553,6 @@ export default function Waitlist() {
           {hardwareComplete && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Do you have an active AI subscription?" />
-              <p style={{ fontSize: '0.8rem', color: COLORS.softText, fontWeight: 300, lineHeight: 1.55, marginBottom: '0.75rem', marginTop: '-0.25rem' }}>
-                Brand Gita uses your own AI — you bring the key, we do the work.
-              </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <RadioCard
                   label="Claude (Anthropic)"
