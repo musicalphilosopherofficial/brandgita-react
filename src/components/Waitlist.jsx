@@ -170,6 +170,7 @@ function HowToCheck({ steps }) {
 
 export default function Waitlist() {
   const sessionId = useRef(makeSessionId()).current
+  const [region, setRegion] = useState(null)   // 'us-canada' | 'anz' | 'other' | 'uk-eu-swiss'
   const [role, setRole] = useState(null)       // 'expert' | 'entrepreneur' | 'none'
   const [platform, setPlatform] = useState(null) // 'youtube' | 'instagram' | 'both'
   const [monetise, setMonetise] = useState(null) // 'monetising' | 'building'
@@ -179,8 +180,11 @@ export default function Waitlist() {
   const [ram, setRam] = useState(null)           // '16gb-plus' | 'under-16gb'
   const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai' | 'none'
 
-  const icpRejected = role === 'none' || platform === 'instagram'
-  const icpComplete = role !== null && !icpRejected && platform !== null && monetise !== null
+  // Geo gate — Brand Gita is not offered to EEA/UK/Swiss residents (privacy policy).
+  const regionRejected = region === 'uk-eu-swiss'
+  const regionOk = region !== null && !regionRejected
+  const icpRejected = regionRejected || role === 'none' || platform === 'instagram'
+  const icpComplete = regionOk && role !== null && role !== 'none' && platform !== null && platform !== 'instagram' && monetise !== null
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
@@ -215,7 +219,7 @@ export default function Waitlist() {
       const res = await fetch('/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name: name.trim() || undefined, hardware, role, platform, monetise, ram, ai }),
+        body: JSON.stringify({ email, name: name.trim() || undefined, hardware, region, role, platform, monetise, ram, ai }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -266,7 +270,44 @@ export default function Waitlist() {
       <div style={containerStyle}>
         <form onSubmit={handleSubmit} noValidate>
 
+          {/* Step 0: Region (geo gate — EEA/UK/Switzerland not served) */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <StepLabel text="Where are you based?" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              <RadioCard
+                label="United States or Canada"
+                selected={region === 'us-canada'}
+                status={null}
+                onClick={() => { setRegion('us-canada'); trackStep(sessionId, 'region', 'us-canada') }}
+              />
+              <RadioCard
+                label="Australia or New Zealand"
+                selected={region === 'anz'}
+                status={null}
+                onClick={() => { setRegion('anz'); trackStep(sessionId, 'region', 'anz') }}
+              />
+              <RadioCard
+                label="Asia, Africa, the Middle East, or Latin America"
+                selected={region === 'other'}
+                status={null}
+                onClick={() => { setRegion('other'); trackStep(sessionId, 'region', 'other') }}
+              />
+              <RadioCard
+                label="United Kingdom, European Union, or Switzerland"
+                selected={region === 'uk-eu-swiss'}
+                status={region === 'uk-eu-swiss' ? 'rejected' : null}
+                onClick={() => { setRegion('uk-eu-swiss'); trackStep(sessionId, 'region', 'uk-eu-swiss') }}
+              />
+            </div>
+            {regionRejected && (
+              <p style={rejectedMsgStyle}>
+                Brand Gita isn&rsquo;t available to residents of the UK, European Union, or Switzerland yet — we&rsquo;re not currently set up to meet the data-protection requirements (GDPR) those regions require. We hope to expand there in a future release.
+              </p>
+            )}
+          </div>
+
           {/* Step 1: Role */}
+          {regionOk && (
           <div style={{ marginBottom: '1.5rem' }}>
             <StepLabel text="What best describes you?" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
@@ -292,15 +333,16 @@ export default function Waitlist() {
                 onClick={() => { setRole('none'); trackStep(sessionId, 'role', 'none') }}
               />
             </div>
-            {icpRejected && (
+            {role === 'none' && (
               <p style={rejectedMsgStyle}>
                 Brand Gita is built for coaches, educators, and entrepreneurs who create expertise-based content on camera. It might not be the right fit right now — but if that changes, come back and apply.
               </p>
             )}
           </div>
+          )}
 
           {/* Step 2: Platform */}
-          {role !== null && !icpRejected && (
+          {regionOk && role !== null && role !== 'none' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Where do you publish video content?" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
