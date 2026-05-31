@@ -1,7 +1,9 @@
+import { requireUserAuth } from './_auth.js';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-api-secret',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 function json(data, status = 200) {
@@ -22,9 +24,10 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Method not allowed' }, 405);
   }
 
-  if (request.headers.get('x-api-secret') !== env.API_SECRET) {
-    return json({ ok: false, error: 'Unauthorized' }, 401);
-  }
+  // Per-user bearer auth — resolves to the authenticated ig_user_id
+  const auth = await requireUserAuth(request, env);
+  if (auth.error) return auth.error;
+  const { ig_user_id } = auth;
 
   let body;
   try {
@@ -39,10 +42,16 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'keys must be a non-empty array' }, 400);
   }
 
-  // Build upload URLs pointing at the /api/media/[key] PUT endpoint on this same worker.
-  // The desktop app PUTs files directly to these URLs with x-api-secret in the header.
-  const baseUrl = new URL(request.url);
-  const origin = baseUrl.origin;
+  // Enforce key prefix scoping — every key must start with {ig_user_id}/
+  // so users can only upload to their own prefix in R2.
+  const prefix = `${ig_user_id}/`;
+  for (const key of keys) {
+    if (!String(key).startsWith(prefix)) {
+      return json({ ok: false, error: `All keys must start with your user prefix: ${prefix}` }, 403);
+    }
+  }
+
+  const origin = new URL(request.url).origin;
 
   const uploads = keys.map((key) => ({
     key,

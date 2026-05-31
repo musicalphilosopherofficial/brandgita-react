@@ -1,7 +1,9 @@
+import { requireUserAuth } from './_auth.js';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-api-secret',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 function json(data, status = 200) {
@@ -18,9 +20,10 @@ export async function onRequest(context) {
     return new Response(null, { status: 204, headers: CORS });
   }
 
-  if (request.headers.get('x-api-secret') !== env.API_SECRET) {
-    return json({ ok: false, error: 'Unauthorized' }, 401);
-  }
+  // Per-user bearer auth — ig_user_id is scoped to the token, not caller-supplied
+  const auth = await requireUserAuth(request, env);
+  if (auth.error) return auth.error;
+  const { ig_user_id } = auth;
 
   // ── POST — create a scheduled post ────────────────────────────────────────
   if (request.method === 'POST') {
@@ -31,11 +34,12 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Invalid JSON' }, 400);
     }
 
-    const { id, ig_user_id, type, asset_keys, cover_key, caption, post_at } = body;
+    // ig_user_id comes from the bearer token — not from the body (never trust caller-supplied user id)
+    const { id, type, asset_keys, cover_key, caption, post_at } = body;
 
-    if (!id || !ig_user_id || !type || !Array.isArray(asset_keys) || asset_keys.length === 0 || !caption || !post_at) {
+    if (!id || !type || !Array.isArray(asset_keys) || asset_keys.length === 0 || !caption || !post_at) {
       return json(
-        { ok: false, error: 'id, ig_user_id, type, asset_keys (non-empty), caption and post_at are required' },
+        { ok: false, error: 'id, type, asset_keys (non-empty), caption and post_at are required' },
         400
       );
     }
@@ -80,14 +84,9 @@ export async function onRequest(context) {
     return json({ ok: true, id });
   }
 
-  // ── GET — list scheduled posts for a user ─────────────────────────────────
+  // ── GET — list scheduled posts for the authenticated user ────────────────
   if (request.method === 'GET') {
-    const url = new URL(request.url);
-    const ig_user_id = url.searchParams.get('ig_user_id');
-
-    if (!ig_user_id) {
-      return json({ ok: false, error: 'ig_user_id query parameter is required' }, 400);
-    }
+    // ig_user_id is scoped from the bearer token — no query param needed/accepted
 
     let rows;
     try {

@@ -104,11 +104,18 @@ export async function onRequest(context) {
   const token_expiry = expiryDate.toISOString();
   const updated_at = new Date().toISOString();
 
+  // Mint a per-user desktop bearer token. This replaces the shared API_SECRET for
+  // all subsequent user-scoped API calls. Stored alongside the IG token so the same
+  // row acts as both the IG credential and the desktop session credential.
+  const desktop_token = crypto.randomUUID() + '-' + crypto.randomUUID(); // 72 chars, URL-safe
+  const desktop_token_created_at = new Date().toISOString();
+
   try {
     await env.DB.prepare(
-      `INSERT OR REPLACE INTO ig_tokens (ig_user_id, access_token, token_expiry, updated_at)
-       VALUES (?, ?, ?, ?)`
-    ).bind(ig_user_id, access_token, token_expiry, updated_at).run();
+      `INSERT OR REPLACE INTO ig_tokens
+         (ig_user_id, access_token, token_expiry, updated_at, desktop_token, desktop_token_created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(ig_user_id, access_token, token_expiry, updated_at, desktop_token, desktop_token_created_at).run();
   } catch (err) {
     console.error('D1 upsert error (ig_tokens):', err);
     return json({ ok: false, error: 'Could not store token' }, 500);
@@ -132,6 +139,8 @@ export async function onRequest(context) {
     console.error('IG username fetch failed (non-fatal):', err);
   }
 
-  // Return ig_user_id + username so the desktop (code path) learns who just connected.
-  return json({ ok: true, ig_user_id, username, expires_in_days: Math.floor(expires_in / 86400) });
+  // Return the desktop_token — the desktop stores this in Electron safeStorage and
+  // uses it as Authorization: Bearer <desktop_token> on all subsequent API calls.
+  // The shared API_SECRET is no longer needed by the desktop after this point.
+  return json({ ok: true, ig_user_id, username, desktop_token, expires_in_days: Math.floor(expires_in / 86400) });
 }

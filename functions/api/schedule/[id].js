@@ -1,7 +1,9 @@
+import { requireUserAuth } from '../_auth.js';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-api-secret',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 function json(data, status = 200) {
@@ -22,9 +24,9 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Method not allowed' }, 405);
   }
 
-  if (request.headers.get('x-api-secret') !== env.API_SECRET) {
-    return json({ ok: false, error: 'Unauthorized' }, 401);
-  }
+  const auth = await requireUserAuth(request, env);
+  if (auth.error) return auth.error;
+  const { ig_user_id } = auth;
 
   const id = params.id;
 
@@ -32,11 +34,11 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Missing post id' }, 400);
   }
 
-  // Fetch the post first so we can guard status and gather R2 keys
+  // Fetch the post and verify it belongs to the authenticated user
   let post;
   try {
     const result = await env.DB.prepare(
-      `SELECT id, status, asset_keys, cover_key FROM scheduled_posts WHERE id = ?`
+      `SELECT id, ig_user_id, status, asset_keys, cover_key FROM scheduled_posts WHERE id = ?`
     )
       .bind(id)
       .first();
@@ -48,6 +50,11 @@ export async function onRequest(context) {
 
   if (!post) {
     return json({ ok: false, error: 'Post not found' }, 404);
+  }
+
+  // Ownership check — users can only delete their own posts
+  if (post.ig_user_id !== ig_user_id) {
+    return json({ ok: false, error: 'Post not found' }, 404); // 404 not 403 — don't leak existence
   }
 
   if (post.status !== 'scheduled') {

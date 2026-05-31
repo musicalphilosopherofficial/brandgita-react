@@ -1,7 +1,9 @@
+import { requireUserAuth } from '../_auth.js';
+
 const CORS_WRITE = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'PUT, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-api-secret',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 function json(data, status = 200) {
@@ -25,10 +27,14 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Missing key' }, 400);
   }
 
-  // ── PUT — upload file to R2 (requires auth) ───────────────────────────────
+  // ── PUT — upload file to R2 (per-user bearer auth + key scoping) ────────────
   if (request.method === 'PUT') {
-    if (request.headers.get('x-api-secret') !== env.API_SECRET) {
-      return json({ ok: false, error: 'Unauthorized' }, 401);
+    const auth = await requireUserAuth(request, env);
+    if (auth.error) return auth.error;
+
+    // Enforce key prefix — user can only write to their own {ig_user_id}/ prefix
+    if (!key.startsWith(`${auth.ig_user_id}/`)) {
+      return json({ ok: false, error: 'You can only upload to your own user prefix' }, 403);
     }
 
     const contentType = request.headers.get('Content-Type') || 'application/octet-stream';
