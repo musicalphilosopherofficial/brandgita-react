@@ -61,8 +61,15 @@ export async function onRequest(context) {
     return json({ error: 'Valid email is required' }, 400);
   }
 
-  // Server-side geo gate — EEA/UK/Switzerland are not served (see privacy policy).
-  // Defence in depth: the form blocks this client-side, but never trust the client.
+  // Server-side ICP gates — mirror the form's rejection paths so a bypassed or
+  // forged client can't land a rejected applicant. Never trust the client.
+  if (role === 'none') {
+    return json({ error: 'Brand Gita is built for expertise-based creators.' }, 403);
+  }
+  if (platform === 'instagram') {
+    return json({ error: 'Brand Gita is built around long-form YouTube.' }, 403);
+  }
+  // Geo gate — EEA/UK/Switzerland are not served (see privacy policy).
   if (region === 'uk-eu-swiss') {
     return json({ error: 'Brand Gita is not currently available in your region.' }, 403);
   }

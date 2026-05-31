@@ -214,7 +214,6 @@ export default function Waitlist() {
     const hardware = getHardwareValue()
     setStatus('loading')
     setErrorMsg('')
-    trackStep(sessionId, 'submitted', null)
     try {
       const res = await fetch('/waitlist', {
         method: 'POST',
@@ -226,6 +225,8 @@ export default function Waitlist() {
         setErrorMsg(data.error || 'Something went wrong. Please try again.')
         setStatus('error')
       } else {
+        // Track only on a successful submit — funnel counts completions, not attempts.
+        trackStep(sessionId, 'submitted', null)
         setStatus('success')
       }
     } catch {
@@ -509,8 +510,8 @@ export default function Waitlist() {
             </div>
           )}
 
-          {/* Step 7: RAM — shown once chip/GPU qualifies */}
-          {chipQualified && (
+          {/* Step 7: RAM — shown once chip/GPU qualifies AND ICP still valid */}
+          {icpComplete && chipQualified && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="How much RAM does your machine have?" />
               <HowToCheck steps={[
@@ -542,8 +543,8 @@ export default function Waitlist() {
             </div>
           )}
 
-          {/* Step 8: AI — only shown when hardware is compatible */}
-          {hardwareComplete && (
+          {/* Step 8: AI — only shown when hardware is compatible AND ICP still valid */}
+          {icpComplete && hardwareComplete && (
             <div style={{ marginBottom: '1.5rem' }}>
               <StepLabel text="Do you have an active AI subscription?" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
@@ -591,8 +592,8 @@ export default function Waitlist() {
             </div>
           )}
 
-          {/* Email step — only shown when hardware + AI are both compatible */}
-          {hardwareComplete && aiComplete && (
+          {/* Email step — shown only when ICP + hardware + AI are all valid */}
+          {icpComplete && hardwareComplete && aiComplete && (
             <div style={{ marginBottom: '1.25rem' }}>
               <StepLabel text="Your details" />
 
