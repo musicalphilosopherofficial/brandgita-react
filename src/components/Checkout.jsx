@@ -13,26 +13,15 @@ const COLORS = {
   amberBorder: '#FFE0B2',
 }
 
-// ─── OFFER CONFIG — REVIEW BEFORE DEPLOYING ────────────────────────────
-// This price IS the test. You're measuring who reaches for their wallet at
-// THIS number, inside the priority window. Change these to set the offer.
+// ─── OFFER CONFIG ──────────────────────────────────────────────────────
+// Founding access is FREE during the maturation phase — no pricing test.
+// The TEST now is urgency: who claims their fast-lane founding spot inside
+// the window. Claiming is genuine (no payment, no deception) — a clean
+// behavioural signal of intent.
 const OFFER = {
-  launchPrice: '$97',          // struck-through — the public price everyone else pays
-  foundingPrice: '$49',        // founding rate, locked for life (board verdict 2026-05-30)
-  billing: '/mo',              // '/mo' or ' one-time'
   seatsTotal: 20,              // real founding-seat cap
-  priorityWindowMinutes: 5,    // minutes they have to lock priority once the form ends
+  priorityWindowMinutes: 5,    // minutes they have to claim their fast lane once the form ends
 }
-
-// Decoy payment methods. These are buttons, not links. Clicking one records the
-// intent signal and fires the disclosure modal. They NEVER redirect to a real
-// processor and NEVER render a card field — that is the legal safety line.
-const METHODS = [
-  { id: 'card',       label: 'Pay with card' },
-  { id: 'paypal',     label: 'PayPal' },
-  { id: 'apple_pay',  label: 'Apple Pay' },
-  { id: 'google_pay', label: 'Google Pay' },
-]
 
 function formatTime(ms) {
   const total = Math.max(0, Math.ceil(ms / 1000))
@@ -43,7 +32,7 @@ function formatTime(ms) {
 
 export default function Checkout({ email, name }) {
   const [showModal, setShowModal] = useState(false)
-  const [selectedMethod, setSelectedMethod] = useState(null)
+  const [claimed, setClaimed] = useState(false)
 
   // The priority window opens the moment this screen appears (i.e. the moment
   // they finish the form), resolved once at mount from localStorage so a refresh
@@ -70,18 +59,21 @@ export default function Checkout({ email, name }) {
 
   const expired = remaining <= 0
 
-  async function handlePick(method) {
-    // Disclosure shows immediately and unconditionally on click.
+  async function handleClaim() {
+    // Confirmation shows immediately on click. This is a genuine claim of a
+    // fast-lane founding spot — no payment, no deception.
+    setClaimed(true)
     setShowModal(true)
-    // Recording the signal is best-effort and never blocks the disclosure.
+    // Recording who claimed (and that they did it inside the window) is the test
+    // signal. Best-effort — never blocks the confirmation.
     try {
       await fetch('/intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, method }),
+        body: JSON.stringify({ email, method: 'fastlane_claim' }),
       })
     } catch {
-      /* signal is best-effort; the disclosure is already on screen */
+      /* signal is best-effort; the confirmation is already on screen */
     }
   }
 
@@ -94,19 +86,19 @@ export default function Checkout({ email, name }) {
     }}>
       <div style={{ width: '100%', maxWidth: 420 }}>
 
-        <p style={badgeStyle}>You&rsquo;re compatible — claim your founding seat</p>
+        <p style={badgeStyle}>You&rsquo;re compatible — claim your fast lane</p>
 
         <div style={cardStyle}>
 
-          {/* Priority window countdown */}
+          {/* Fast-lane window countdown */}
           <div style={expired ? timerExpiredStyle : timerStyle}>
             {expired ? (
-              'Priority window closed'
+              'Fast-lane window closed'
             ) : (
               <>
                 <span aria-hidden="true">⏳</span>
                 <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{formatTime(remaining)}</strong>
-                <span>left to lock priority access</span>
+                <span>left to claim your fast lane</span>
               </>
             )}
           </div>
@@ -118,29 +110,26 @@ export default function Checkout({ email, name }) {
             }}>
               Founding creator
             </p>
-            <span style={seatPillStyle}>{OFFER.seatsTotal} founding seats</span>
+            <span style={seatPillStyle}>{OFFER.seatsTotal} founding spots</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', marginTop: '0.7rem' }}>
             <span style={{ fontSize: '2.4rem', fontWeight: 800, color: COLORS.ink, letterSpacing: '-0.02em' }}>
-              {OFFER.foundingPrice}
+              Free
             </span>
-            <span style={{ fontSize: '1rem', color: COLORS.faint, textDecoration: 'line-through' }}>
-              {OFFER.launchPrice}
-            </span>
-            <span style={{ fontSize: '0.95rem', color: COLORS.softText }}>{OFFER.billing}</span>
+            <span style={{ fontSize: '0.95rem', color: COLORS.softText }}>founding access</span>
           </div>
 
           <p style={{ fontSize: '0.82rem', color: COLORS.green, fontWeight: 600, margin: '0.4rem 0 0' }}>
-            Locked for life at {OFFER.foundingPrice}{OFFER.billing} — everyone else pays {OFFER.launchPrice}{OFFER.billing}.
+            Full product, no cost — the fast lane just puts you first in line.
           </p>
 
           <ul style={listStyle}>
             {[
-              'Early access before public launch',
+              'Free founding access before public launch',
+              'First in line when access opens',
               'Everything happens in front of you — no black box',
-              'A direct line to shape what we build',
-              'Half price for life — all we ask is honest feedback',
+              'A direct line to shape what we build — all we ask is honest feedback',
             ].map((item, i) => (
               <li key={i} style={liStyle}>
                 <span style={checkStyle}>✓</span>
@@ -149,52 +138,23 @@ export default function Checkout({ email, name }) {
             ))}
           </ul>
 
-          <div style={dueRowStyle}>
-            <span>Due today</span>
-            <span style={{ fontWeight: 800, color: COLORS.ink }}>{OFFER.foundingPrice}</span>
-          </div>
-
           {expired ? (
             <div style={closedBoxStyle}>
-              Your {OFFER.priorityWindowMinutes}-minute priority window has closed. You&rsquo;re still on the
+              Your {OFFER.priorityWindowMinutes}-minute fast-lane window has closed. You&rsquo;re still on the
               waitlist — we&rsquo;ll be in touch when founding access opens.
             </div>
+          ) : claimed ? (
+            <div style={closedBoxStyle}>
+              ✓ Your fast-lane spot is locked. We&rsquo;ll email you first when founding access opens.
+            </div>
           ) : (
-            <>
-              <p style={{
-                fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.14em',
-                textTransform: 'uppercase', color: COLORS.faint, margin: '0.25rem 0 0.75rem',
-              }}>
-                Choose how to pay
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                {METHODS.map(m => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setSelectedMethod(m.id)}
-                    style={{
-                      ...payBtnStyle,
-                      borderColor: selectedMethod === m.id ? COLORS.blue : COLORS.border,
-                      background: selectedMethod === m.id ? '#EDF5FF' : '#fff',
-                      color: selectedMethod === m.id ? COLORS.blue : COLORS.ink,
-                    }}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-
-              {selectedMethod && (
-                <button
-                  type="button"
-                  onClick={() => handlePick(selectedMethod)}
-                  style={checkoutBtnStyle}
-                >
-                  Complete checkout →
-                </button>
-              )}
-            </>
+            <button
+              type="button"
+              onClick={handleClaim}
+              style={checkoutBtnStyle}
+            >
+              Claim my fast-lane spot →
+            </button>
           )}
         </div>
 
@@ -202,7 +162,7 @@ export default function Checkout({ email, name }) {
           fontSize: '0.75rem', color: COLORS.faint, textAlign: 'center',
           marginTop: '0.9rem', fontWeight: 300, lineHeight: 1.5,
         }}>
-          Cancel anytime · your founding price is locked for life.
+          Free founding access · we&rsquo;ll only contact you about your spot.
         </p>
       </div>
 
@@ -217,21 +177,18 @@ function DisclosureModal({ firstName, onClose }) {
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✋</div>
+        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎉</div>
         <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: COLORS.ink, margin: '0 0 0.6rem', lineHeight: 1.3 }}>
-          Hold on, {firstName} — this was a test.
+          You&rsquo;re in, {firstName} — fast lane secured.
         </h3>
         <p style={modalP}>
-          You haven&rsquo;t been charged, and we never asked for a card. Brand Gita isn&rsquo;t open for purchase yet.
-        </p>
-        <p style={modalP}>
-          We wanted to see who&rsquo;s genuinely ready — and you just showed us. Because you reached for your wallet,
-          you&rsquo;re <strong style={{ color: COLORS.ink }}>first in line for one of {OFFER.seatsTotal} founding
-          seats at half price</strong> the moment we open.
+          You just claimed one of <strong style={{ color: COLORS.ink }}>{OFFER.seatsTotal} fast-lane founding
+          spots</strong>. Founding access is <strong style={{ color: COLORS.ink }}>free</strong> — all we ask is
+          honest feedback as we mature the product.
         </p>
         <p style={{ ...modalP, marginTop: '0.9rem' }}>
-          We&rsquo;ll <strong style={{ color: COLORS.ink }}>reach out personally</strong> when founding access opens
-          — keep an eye on your inbox.
+          When access opens you&rsquo;re <strong style={{ color: COLORS.ink }}>first in line</strong> — we&rsquo;ll
+          reach out personally. Keep an eye on your inbox.
         </p>
         <button type="button" onClick={onClose} style={modalBtn}>Got it</button>
       </div>
