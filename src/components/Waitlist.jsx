@@ -189,6 +189,7 @@ export default function Waitlist() {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
+  const [intentToken, setIntentToken] = useState(null)
 
   function getHardwareValue() {
     if (os === 'mac' && mac === 'pro') return 'mac-apple-silicon'
@@ -227,6 +228,7 @@ export default function Waitlist() {
       } else {
         // Track only on a successful submit — funnel counts completions, not attempts.
         trackStep(sessionId, 'submitted', null)
+        setIntentToken(data.intent_token || null)
         setStatus('success')
       }
     } catch {
@@ -238,7 +240,7 @@ export default function Waitlist() {
   if (status === 'success') {
     // Email captured. Run the smoke test: qualified applicants hit the
     // founding-access checkout; clicking a payment method records intent.
-    return <Checkout email={email} name={name} />
+    return <Checkout email={email} name={name} claimToken={intentToken} />
   }
 
   return (

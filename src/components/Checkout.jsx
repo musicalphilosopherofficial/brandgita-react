@@ -30,7 +30,7 @@ function formatTime(ms) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export default function Checkout({ email, name }) {
+export default function Checkout({ email, name, claimToken }) {
   const [showModal, setShowModal] = useState(false)
   const [claimed, setClaimed] = useState(false)
 
@@ -70,7 +70,7 @@ export default function Checkout({ email, name }) {
       await fetch('/intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, method: 'fastlane_claim' }),
+        body: JSON.stringify({ email, method: 'fastlane_claim', token: claimToken }),
       })
     } catch {
       /* signal is best-effort; the confirmation is already on screen */

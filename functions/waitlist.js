@@ -78,6 +78,10 @@ export async function onRequest(context) {
   const cleanName = name.trim();
   const score = priorityScore({ role, platform, monetise, hardware });
 
+  // Single-use token returned to the client and required by /intent to bump
+  // priority — binds the fast-lane claim to this real submitter, not a forged email.
+  const intentToken = crypto.randomUUID();
+
   try {
     // Check if this email already exists — always update with most recent entry
     const existing = await env.DB.prepare(
@@ -86,18 +90,18 @@ export async function onRequest(context) {
 
     if (existing) {
       await env.DB.prepare(
-        `UPDATE waitlist SET name=?, hardware=?, region=?, role=?, platform=?, monetise=?, ram=?, ai=?, priority_score=? WHERE id=?`
-      ).bind(cleanName, hardware || null, region || null, role || null, platform || null, monetise || null, ram || null, ai || null, score, existing.id).run();
+        `UPDATE waitlist SET name=?, hardware=?, region=?, role=?, platform=?, monetise=?, ram=?, ai=?, priority_score=?, intent_token=? WHERE id=?`
+      ).bind(cleanName, hardware || null, region || null, role || null, platform || null, monetise || null, ram || null, ai || null, score, intentToken, existing.id).run();
     } else {
       await env.DB.prepare(
-        `INSERT INTO waitlist (email, name, hardware, region, role, platform, monetise, ram, ai, priority_score)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(cleanEmail, cleanName, hardware || null, region || null, role || null, platform || null, monetise || null, ram || null, ai || null, score).run();
+        `INSERT INTO waitlist (email, name, hardware, region, role, platform, monetise, ram, ai, priority_score, intent_token)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(cleanEmail, cleanName, hardware || null, region || null, role || null, platform || null, monetise || null, ram || null, ai || null, score, intentToken).run();
     }
   } catch (err) {
     console.error('D1 error:', err);
     return json({ error: 'Could not save. Please try again.' }, 500);
   }
 
-  return json({ success: true });
+  return json({ success: true, intent_token: intentToken });
 }
