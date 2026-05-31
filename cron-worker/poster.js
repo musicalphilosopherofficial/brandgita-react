@@ -1,12 +1,15 @@
-// functions/scheduled/poster.js
+// cron-worker/poster.js
 //
-// Cloudflare Pages scheduled (cron) handler that publishes due Instagram posts
-// via the Instagram Graph API. The caller wires the cron schedule (every minute)
-// in wrangler.toml; this file only implements the handler.
+// Standalone Cloudflare WORKER (not a Pages Function) that publishes due
+// Instagram posts via the Instagram Graph API. Runs on a 1-minute cron defined
+// in cron-worker/wrangler.toml. Pages Functions cannot run cron, so this is a
+// separate Worker deployment sharing the same D1 database.
 //
 // Bindings used:
-//   env.DB              — D1 database (scheduled_posts, ig_tokens)
-//   env.SCHEDULE_BUCKET — R2 bucket (brandgita-scheduled), assets served via /api/media/{key}
+//   env.DB — D1 database (scheduled_posts, ig_tokens)
+//
+// Media assets are fetched by Meta from the Pages site's public
+// https://brandgita.com/api/media/{key} endpoint, so this Worker needs no R2 binding.
 //
 // Design notes:
 //   - R2 objects are private and have no built-in presigned GET URL in Workers.

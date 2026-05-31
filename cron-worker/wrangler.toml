@@ -1,0 +1,24 @@
+# Standalone Cron Worker — Instagram scheduled poster.
+#
+# Cloudflare PAGES does not support cron triggers. The poster therefore runs as
+# its own Worker, deployed separately from the Pages site, sharing the same D1
+# database (bound by database_id). It reads the scheduled_posts queue and calls
+# the Instagram Graph API. Media assets are fetched by Meta from the Pages site's
+# public /api/media/{key} endpoint, so this Worker needs no R2 binding.
+#
+# Deploy from this directory:
+#   cd cron-worker && npx wrangler deploy
+#
+# The cron schedule lives here (Workers read [triggers]; Pages do not).
+
+name = "brandgita-cron-poster"
+main = "poster.js"
+compatibility_date = "2024-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "brandgita-waitlist"
+database_id = "c0c56a08-861b-402b-813d-cd8734e8977a"
+
+[triggers]
+crons = ["* * * * *"]
