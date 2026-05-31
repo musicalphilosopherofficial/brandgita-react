@@ -171,7 +171,7 @@ function HowToCheck({ steps }) {
 export default function Waitlist() {
   const sessionId = useRef(makeSessionId()).current
   const [region, setRegion] = useState(null)   // 'us-canada' | 'anz' | 'other' | 'uk-eu-swiss'
-  const [role, setRole] = useState(null)       // 'expert' | 'entrepreneur' | 'none'
+  const [role, setRole] = useState(null)       // 'creator' | 'none'
   const [platform, setPlatform] = useState(null) // 'youtube' | 'instagram' | 'both'
   const [monetise, setMonetise] = useState(null) // 'monetising' | 'building'
   const [os, setOs] = useState(null)             // 'mac' | 'windows'
@@ -312,18 +312,11 @@ export default function Waitlist() {
             <StepLabel text="What best describes you?" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
               <RadioCard
-                label="Coach, consultant, or educator"
-                sublabel="You teach or advise — courses, coaching, consulting, tutorials"
-                selected={role === 'expert'}
+                label="Coach, educator, consultant, or founder"
+                sublabel="You teach, advise, or build a business around your expertise"
+                selected={role === 'creator'}
                 status={null}
-                onClick={() => { setRole('expert'); trackStep(sessionId, 'role', 'expert') }}
-              />
-              <RadioCard
-                label="Entrepreneur or founder"
-                sublabel="Building a business around your personal brand and expertise"
-                selected={role === 'entrepreneur'}
-                status={null}
-                onClick={() => { setRole('entrepreneur'); trackStep(sessionId, 'role', 'entrepreneur') }}
+                onClick={() => { setRole('creator'); trackStep(sessionId, 'role', 'creator') }}
               />
               <RadioCard
                 label="None of these"

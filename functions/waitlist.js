@@ -15,17 +15,18 @@ function json(data, status = 200) {
 // Higher = invite sooner
 function priorityScore({ role, platform, monetise, hardware }) {
   let score = 0;
-  if (role === 'coach' || role === 'educator') score += 3;
-  else if (role === 'entrepreneur') score += 2;
+  // Role: 'creator' is the only accepted role ('none' is rejected upstream).
+  if (role === 'creator') score += 3;
 
+  // Platform: both > youtube. ('instagram'-only is rejected upstream.)
   if (platform === 'both') score += 3;
-  else if (platform === 'youtube' || platform === 'instagram') score += 2;
-  else if (platform === 'starting') score += 1;
+  else if (platform === 'youtube') score += 2;
 
-  if (monetise === 'courses' || monetise === 'coaching') score += 3;
-  else if (monetise === 'community') score += 2;
+  // Monetisation: already earning ranks above still-building.
+  if (monetise === 'monetising') score += 3;
   else if (monetise === 'building') score += 1;
 
+  // Hardware: dedicated GPU paths rank above Quick Sync.
   if (hardware === 'mac-apple-silicon' || hardware === 'windows-intel-nvidia' || hardware === 'windows-amd-nvidia') score += 3;
   else if (hardware === 'windows-intel-qsv') score += 2;
 
