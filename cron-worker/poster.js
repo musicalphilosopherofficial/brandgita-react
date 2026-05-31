@@ -126,10 +126,16 @@ async function igGet(path, fields, accessToken) {
 // DB state transitions
 // ---------------------------------------------------------------------------
 
-async function markPosting(env, id) {
-  await env.DB.prepare(
-    `UPDATE scheduled_posts SET status = 'posting' WHERE id = ?`
+// Atomically claim a post. Returns true only if THIS run flipped it from
+// 'scheduled' to 'posting'. Cron runs every minute but a slow reel can take 5+
+// minutes, so runs overlap — a plain unconditional UPDATE let two ticks both
+// process the same row and double-publish. The conditional WHERE + changes check
+// is a compare-and-swap: only one run wins.
+async function claimPost(env, id) {
+  const res = await env.DB.prepare(
+    `UPDATE scheduled_posts SET status = 'posting' WHERE id = ? AND status = 'scheduled'`
   ).bind(id).run();
+  return res?.meta?.changes === 1;
 }
 
 async function markPosted(env, id, permalink) {
@@ -281,8 +287,10 @@ async function postCarousel(post, assetKeys, accessToken) {
 // ---------------------------------------------------------------------------
 
 async function processPost(env, post) {
-  // Claim the post so a subsequent (overlapping) cron run won't double-pick it.
-  await markPosting(env, post.id);
+  // Atomically claim the post. If another overlapping run already claimed it,
+  // bail out immediately — do NOT publish (prevents double-posting to Instagram).
+  const won = await claimPost(env, post.id);
+  if (!won) return;
 
   // Look up the access token for this user.
   const tokenRow = await env.DB.prepare(
@@ -362,7 +370,8 @@ async function refreshExpiringTokens(env) {
       const data = await res.json();
 
       if (!res.ok || !data.access_token) {
-        console.error(`Token refresh failed for ${row.ig_user_id}:`, data);
+        // Scalar-only log — `data` is the refresh response and can carry a token.
+        console.error(`Token refresh failed for ${row.ig_user_id}:`, { status: res.status, code: data?.error?.code });
         continue;
       }
 

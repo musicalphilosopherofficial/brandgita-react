@@ -1,30 +1,35 @@
 /**
- * GET /admin/export?secret=YOUR_EXPORT_SECRET
- * Returns the full waitlist as CSV.
- * Set EXPORT_SECRET in Cloudflare Pages → Settings → Environment Variables.
+ * GET /admin/export
+ * Returns the full waitlist as CSV. Protected by HTTP Basic Auth (same as the
+ * other /admin routes). The secret is NEVER accepted in the query string —
+ * query strings leak into access logs, browser history, and Referer headers,
+ * and this endpoint dumps every applicant's name + email (full PII).
  */
+import { requireAuth } from './_auth.js';
+
+// Neutralise CSV/spreadsheet formula injection: a cell beginning with = + - @
+// (or tab/CR) can execute when opened in Excel/Sheets. Prefix with a single quote.
+function csvCell(value) {
+  let s = String(value ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
-  const url = new URL(request.url);
-  const secret = url.searchParams.get('secret');
-
-  if (!secret || secret !== env.EXPORT_SECRET) {
-    return new Response('Unauthorized', { status: 401 });
-  }
+  const unauth = requireAuth(request, env);
+  if (unauth) return unauth;
 
   const { results } = await env.DB.prepare(
-    `SELECT id, email, name, role, platform, monetise, hardware, confirmed, priority_score, intent_signal, intent_at, created_at
+    `SELECT id, email, name, role, platform, monetise, hardware, region, confirmed, priority_score, intent_signal, intent_at, created_at
      FROM waitlist ORDER BY priority_score DESC, created_at ASC`
   ).all();
 
-  const header = 'id,email,name,role,platform,monetise,hardware,confirmed,priority_score,intent_signal,intent_at,created_at\n';
+  const cols = ['id', 'email', 'name', 'role', 'platform', 'monetise', 'hardware', 'region', 'confirmed', 'priority_score', 'intent_signal', 'intent_at', 'created_at'];
+  const header = cols.join(',') + '\n';
   const rows = results
-    .map(r =>
-      [r.id, r.email, r.name ?? '', r.role ?? '', r.platform ?? '', r.monetise ?? '', r.hardware ?? '', r.confirmed, r.priority_score, r.intent_signal ?? '', r.intent_at ?? '', r.created_at]
-        .map(v => `"${String(v).replace(/"/g, '""')}"`)
-        .join(',')
-    )
+    .map(r => cols.map(c => csvCell(r[c])).join(','))
     .join('\n');
 
   return new Response(header + rows, {

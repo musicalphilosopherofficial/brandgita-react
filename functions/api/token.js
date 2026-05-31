@@ -1,7 +1,9 @@
+import { sha256Hex, requireUserAuth } from './_auth.js';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-api-secret',
+  'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, x-api-secret, Authorization',
 };
 
 function json(data, status = 200) {
@@ -16,6 +18,22 @@ export async function onRequest(context) {
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS });
+  }
+
+  // ── DELETE — revoke the caller's desktop token (logout / disconnect) ────────
+  // Authenticated by the bearer token itself; nulls it so it can never be reused.
+  if (request.method === 'DELETE') {
+    const auth = await requireUserAuth(request, env);
+    if (auth.error) return auth.error;
+    try {
+      await env.DB.prepare(
+        `UPDATE ig_tokens SET desktop_token = NULL, desktop_token_created_at = NULL WHERE ig_user_id = ?`
+      ).bind(auth.ig_user_id).run();
+    } catch (err) {
+      console.error('D1 revoke error (ig_tokens):', { message: err?.message });
+      return json({ ok: false, error: 'Could not revoke token' }, 500);
+    }
+    return json({ ok: true, revoked: true });
   }
 
   if (request.method !== 'POST') {
@@ -61,9 +79,9 @@ export async function onRequest(context) {
       const codeData = await codeRes.json();
 
       if (!codeRes.ok || !codeData.access_token || !codeData.user_id) {
-        console.error('IG code exchange error:', codeData);
-        const errMsg = codeData?.error_message || codeData?.error?.message || 'OAuth code exchange failed';
-        return json({ ok: false, error: errMsg }, 502);
+        // Scalar-only log — the raw response can carry a token; never serialize it.
+        console.error('IG code exchange error:', { status: codeRes.status, code: codeData?.error?.code });
+        return json({ ok: false, error: 'OAuth code exchange failed' }, 502);
       }
 
       short_lived_token = codeData.access_token;
@@ -90,9 +108,9 @@ export async function onRequest(context) {
     igData = await igRes.json();
 
     if (!igRes.ok || !igData.access_token) {
-      const errMsg = igData?.error?.message || igData?.error_message || 'Token exchange failed';
-      console.error('IG token exchange error:', igData);
-      return json({ ok: false, error: errMsg }, 502);
+      // Scalar-only log — never serialize igData (carries access_token).
+      console.error('IG token exchange error:', { status: igRes.status, code: igData?.error?.code });
+      return json({ ok: false, error: 'Token exchange failed' }, 502);
     }
   } catch (err) {
     console.error('Fetch error during IG token exchange:', err);
@@ -105,9 +123,11 @@ export async function onRequest(context) {
   const updated_at = new Date().toISOString();
 
   // Mint a per-user desktop bearer token. This replaces the shared API_SECRET for
-  // all subsequent user-scoped API calls. Stored alongside the IG token so the same
-  // row acts as both the IG credential and the desktop session credential.
-  const desktop_token = crypto.randomUUID() + '-' + crypto.randomUUID(); // 72 chars, URL-safe
+  // all subsequent user-scoped API calls. We return the plaintext to the desktop
+  // exactly once and store ONLY its SHA-256 hash — a D1 read can never yield a
+  // usable token. ~244 bits of entropy, so the hash needs no salt/KDF.
+  const desktop_token = crypto.randomUUID() + '-' + crypto.randomUUID();
+  const desktop_token_hash = await sha256Hex(desktop_token);
   const desktop_token_created_at = new Date().toISOString();
 
   try {
@@ -115,9 +135,9 @@ export async function onRequest(context) {
       `INSERT OR REPLACE INTO ig_tokens
          (ig_user_id, access_token, token_expiry, updated_at, desktop_token, desktop_token_created_at)
        VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(ig_user_id, access_token, token_expiry, updated_at, desktop_token, desktop_token_created_at).run();
+    ).bind(ig_user_id, access_token, token_expiry, updated_at, desktop_token_hash, desktop_token_created_at).run();
   } catch (err) {
-    console.error('D1 upsert error (ig_tokens):', err);
+    console.error('D1 upsert error (ig_tokens):', { message: err?.message });
     return json({ ok: false, error: 'Could not store token' }, 500);
   }
 

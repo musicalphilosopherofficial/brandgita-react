@@ -14,10 +14,17 @@ export async function onRequest(context) {
 
   const url = new URL(request.url)
 
-  // Fetch funnel data internally using the env secret directly
+  // Escape any DB-sourced string before interpolating into HTML. funnel `value`s
+  // originate from the UNAUTHENTICATED /track endpoint, so they are attacker-
+  // controlled — without escaping this is stored XSS in the admin's session.
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+  // Fetch funnel data internally. Pass the secret in the Basic Auth HEADER, never
+  // the query string (query strings leak into logs/history/Referer).
   const funnelUrl = new URL('/admin/funnel', url.origin)
-  funnelUrl.searchParams.set('secret', env.EXPORT_SECRET)
-  const funnelRes = await fetch(funnelUrl.toString())
+  const basic = 'Basic ' + btoa('admin:' + env.EXPORT_SECRET)
+  const funnelRes = await fetch(funnelUrl.toString(), { headers: { Authorization: basic } })
   const data = await funnelRes.json()
 
   const { total_sessions, funnel } = data
@@ -51,10 +58,10 @@ export async function onRequest(context) {
     const pct = Math.round((step.visitors / top) * 100)
     const prev = i > 0 ? funnel[i - 1].visitors : null
     const drop = dropPct(step.visitors, prev)
-    const label = STEP_LABELS[step.step] || step.step
+    const label = STEP_LABELS[step.step] || esc(step.step)
     const breakdownHtml = step.step === 'submitted' ? '' : step.breakdown.map(b => {
       const bPct = Math.round((b.count / step.visitors) * 100)
-      return `<span class="tag">${b.value} <b>${bPct}%</b></span>`
+      return `<span class="tag">${esc(b.value)} <b>${bPct}%</b></span>`
     }).join('')
 
     return `
@@ -143,6 +150,12 @@ export async function onRequest(context) {
 </html>`
 
   return new Response(html, {
-    headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+    headers: {
+      'Content-Type': 'text/html;charset=UTF-8',
+      // Defence-in-depth against injected markup: no script execution at all.
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+    },
   })
 }

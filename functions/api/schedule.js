@@ -48,9 +48,42 @@ export async function onRequest(context) {
       return json({ ok: false, error: "type must be 'reel' or 'carousel'" }, 400);
     }
 
-    // Validate post_at is a parseable ISO date
-    if (isNaN(Date.parse(post_at))) {
+    // Caption length — Instagram's own cap is 2200 chars. Bounds the DB write and
+    // the cron's API call.
+    if (typeof caption !== 'string' || caption.length > 2200) {
+      return json({ ok: false, error: 'caption must be a string up to 2200 characters' }, 400);
+    }
+
+    // Asset count — reel is exactly 1 video; carousel is 2–10 items. Without a cap,
+    // one post could spawn hundreds of IG container calls and starve the cron.
+    if (type === 'reel' && asset_keys.length !== 1) {
+      return json({ ok: false, error: 'a reel must have exactly 1 asset' }, 400);
+    }
+    if (type === 'carousel' && (asset_keys.length < 2 || asset_keys.length > 10)) {
+      return json({ ok: false, error: 'a carousel must have 2–10 assets' }, 400);
+    }
+
+    // Every asset_key (and cover_key) must live under THIS user's prefix — the cron
+    // turns these into public media URLs, so a foreign key would expose/serve another
+    // user's object. ig_user_id is token-derived, so this is a hard ownership check.
+    const prefix = `${ig_user_id}/`;
+    const allKeys = [...asset_keys, ...(cover_key ? [cover_key] : [])];
+    for (const k of allKeys) {
+      if (typeof k !== 'string' || !k.startsWith(prefix)) {
+        return json({ ok: false, error: 'all asset keys must belong to your account' }, 403);
+      }
+    }
+
+    // post_at must be a valid ISO date, not in the past, and within the scheduling
+    // window. The R2 lifecycle deletes assets after 45 days, so a post scheduled
+    // beyond that would lose its media before firing — cap at 30 days.
+    const postAtMs = Date.parse(post_at);
+    if (isNaN(postAtMs)) {
       return json({ ok: false, error: 'post_at must be a valid ISO 8601 date string' }, 400);
+    }
+    const nowMs = Date.now();
+    if (postAtMs > nowMs + 30 * 24 * 60 * 60 * 1000) {
+      return json({ ok: false, error: 'post_at cannot be more than 30 days in the future' }, 400);
     }
 
     const now = new Date().toISOString();
@@ -73,10 +106,10 @@ export async function onRequest(context) {
         )
         .run();
     } catch (err) {
-      console.error('D1 insert error (scheduled_posts):', err);
-      // Surface duplicate-id conflicts clearly
+      console.error('D1 insert error (scheduled_posts):', { message: err?.message });
+      // Generic conflict — don't echo the caller-supplied id (cross-tenant existence oracle).
       if (err.message?.includes('UNIQUE') || err.message?.includes('unique')) {
-        return json({ ok: false, error: `A post with id '${id}' already exists` }, 409);
+        return json({ ok: false, error: 'A post with this id already exists' }, 409);
       }
       return json({ ok: false, error: 'Could not save scheduled post' }, 500);
     }
