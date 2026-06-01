@@ -28,8 +28,18 @@ hr { border: none; border-top: 1px solid #DCD7C8; margin: 2rem 0; }
 .toc ol { margin-left: 1.25rem; }
 .toc li { margin-bottom: 0.3rem; font-size: 0.875rem; color: #4A4842; }
 table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.875rem; }
-th, td { border: 1px solid #DCD7C8; padding: 0.6rem 0.75rem; text-align: left; vertical-align: top; color: #1A1A18; }
+th, td { border: 1px solid #DCD7C8; padding: 0.6rem 0.75rem; text-align: left; vertical-align: top; color: #1A1A18; overflow-wrap: break-word; }
 th { background: #F4F0E8; font-weight: 600; font-size: 0.82rem; }
 footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid #DCD7C8; font-size: 0.8rem; color: #9B9789; text-align: center; }
 footer a { color: #6E6B62; }
 footer a:hover { color: #2196F3; }
+
+/* Mobile polish: tighten side padding and shrink dense tables so they fit
+   without a horizontal scroll; overflow-wrap (above) stops long strings
+   (emails, tokens) forcing the layout wider than the screen. */
+@media (max-width: 600px) {
+  body { padding: 2.25rem 1.1rem; }
+  h1 { font-size: 1.6rem; }
+  table { font-size: 0.78rem; }
+  th, td { padding: 0.4rem 0.5rem; }
+}
