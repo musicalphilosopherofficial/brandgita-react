@@ -76,35 +76,47 @@ export default function HowItWorks() {
               </span>
             </div>
 
-            <p style={{
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: '#1A1A18',
-              marginBottom: '0.4rem',
-              lineHeight: 1.25,
+            <div className="hiw-text" style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
             }}>
-              {step.title}
-            </p>
+              <p style={{
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: '#1A1A18',
+                marginBottom: '0.4rem',
+                lineHeight: 1.25,
+              }}>
+                {step.title}
+              </p>
 
-            <p style={{
-              fontSize: '0.8rem',
-              fontWeight: 300,
-              color: '#6E6B62',
-              lineHeight: 1.55,
-              maxWidth: 180,
-            }}>
-              {step.body}
-            </p>
+              <p style={{
+                fontSize: '0.8rem',
+                fontWeight: 300,
+                color: '#6E6B62',
+                lineHeight: 1.55,
+                maxWidth: 180,
+              }}>
+                {step.body}
+              </p>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Mobile: vertical stack */}
+      {/* Mobile: vertical stack — [dot] → [title above body], left-aligned */}
       <style>{`
         @media (max-width: 600px) {
-          .how-it-works-grid { grid-template-columns: 1fr !important; }
+          .how-it-works-grid { grid-template-columns: 1fr !important; gap: 0.5rem !important; }
           .how-it-works-line { display: none !important; }
-          .how-it-works-step { flex-direction: row !important; text-align: left !important; align-items: flex-start !important; padding: 0 0 1.5rem 0 !important; }
+          .how-it-works-step {
+            flex-direction: row !important;
+            align-items: flex-start !important;
+            gap: 0.875rem !important;
+            padding: 0 0 1.75rem 0 !important;
+          }
+          .how-it-works-step .hiw-text { align-items: flex-start !important; text-align: left !important; }
           .how-it-works-step p { max-width: none !important; }
         }
       `}</style>
