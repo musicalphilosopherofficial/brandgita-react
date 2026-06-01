@@ -13,4 +13,7 @@ body {
   flex-direction: column;
   align-items: center;
   padding: 2rem 1.5rem;
+  /* Safety net: keep any accidental wide element from creating a horizontal
+     scroll that the centered layout would clip on the left edge (mobile). */
+  overflow-x: hidden;
 }

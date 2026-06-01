@@ -25,15 +25,15 @@ export default function HowItWorks() {
   return (
     <div style={{ width: '100%', marginBottom: '4rem' }}>
 
-      {/* Desktop: horizontal row */}
-      <div style={{
+      {/* Desktop: horizontal row · stacks to a vertical list under 600px */}
+      <div className="how-it-works-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: 0,
         position: 'relative',
       }}>
         {/* Connector line */}
-        <div style={{
+        <div className="how-it-works-line" style={{
           position: 'absolute',
           top: 18,
           left: 'calc(12.5% + 1px)',
@@ -44,7 +44,7 @@ export default function HowItWorks() {
         }} />
 
         {STEPS.map((step, i) => (
-          <div key={i} style={{
+          <div key={i} className="how-it-works-step" style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -52,6 +52,7 @@ export default function HowItWorks() {
             padding: '0 1rem',
             position: 'relative',
             zIndex: 1,
+            minWidth: 0,
           }}>
             {/* Step dot */}
             <div style={{
