@@ -1,5 +1,6 @@
 import { mediaSlug, requireUserAuth, sha256Hex } from './_auth.js';
 import { encryptToken } from './_crypto.js';
+import { requireRateLimit, clientKey } from './_ratelimit.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -40,6 +41,15 @@ export async function onRequest(context) {
   if (request.method !== 'POST') {
     return json({ ok: false, error: 'Method not allowed' }, 405);
   }
+
+  // Rate limit BEFORE the secret check, on purpose: the point is to slow down guessing
+  // the secret, so a wrong guess must cost the attacker a token from their bucket. Doing
+  // it after the check would only limit callers who already hold the secret — useless.
+  //
+  // Fails OPEN if the binding is absent (Pages support is undocumented). Verify with
+  // rateLimitStatus rather than assuming it is live.
+  const limited = await requireRateLimit(env, 'TOKEN_LIMITER', clientKey(request, 'token'), CORS);
+  if (limited) return limited;
 
   // Shared-secret auth — desktop app must send x-api-secret
   if (request.headers.get('x-api-secret') !== env.API_SECRET) {

@@ -10,3 +10,21 @@ database_id = "c0c56a08-861b-402b-813d-cd8734e8977a"
 [[r2_buckets]]
 binding = "SCHEDULE_BUCKET"
 bucket_name = "brandgita-scheduled"
+
+# ── Rate limiting ────────────────────────────────────────────────────────────
+# Guards /api/token, the bootstrap endpoint. It takes a SHARED x-api-secret and mints a
+# bearer token for any user, so it is the one endpoint where guessing wins something.
+# Without a limiter, guesses run at line rate.
+#
+# `period` must be exactly 10 or 60 — no other value is accepted. Limits are LOCAL TO
+# THE COLO the request lands in, not global, so a distributed attacker gets roughly one
+# budget per data centre. That is fine for the actual threat (one script at line rate)
+# and must not be described as a hard global cap.
+#
+# Pages Functions support for this binding is UNDOCUMENTED. The consuming code treats a
+# missing binding as "no limit" rather than failing, so if Pages ignores it the endpoint
+# still works — see requireRateLimit in functions/api/_ratelimit.js.
+[[ratelimits]]
+name = "TOKEN_LIMITER"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
