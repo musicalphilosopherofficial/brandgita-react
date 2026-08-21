@@ -152,18 +152,18 @@ test('post_at in the past → 400', async () => {
   assert.equal(updates.length, 0);
 });
 
-test('post_at beyond the 45-day horizon → 400', async () => {
-  const { context, updates } = ctx({ post_at: futureISO(46) }, { post: scheduledPost() });
+test('post_at beyond the 30-day horizon → 400', async () => {
+  const { context, updates } = ctx({ post_at: futureISO(31) }, { post: scheduledPost() });
   const res = await onRequest(context);
   const data = await res.json();
 
   assert.equal(res.status, 400);
-  assert.match(data.error, /45 days/);
+  assert.match(data.error, /30 days/);
   assert.equal(updates.length, 0);
 });
 
-test('post_at at day 40 (within 45-day horizon) → ok', async () => {
-  const at = futureISO(40);
+test('post_at at day 25 (within 30-day horizon) → ok', async () => {
+  const at = futureISO(25);
   const { context, updates } = ctx({ post_at: at }, { post: scheduledPost() });
   const res = await onRequest(context);
   const data = await res.json();

@@ -41,8 +41,8 @@ PATCH makes it a dozen timestamp writes and **zero bytes transferred**.
   key with `400` (swapping media = a different post the cron never validated).
 - Guards mirror `DELETE`: ownership mismatch → **404** (no existence leak);
   non-`scheduled` status → **409**; `post_at` must be in the future; caption ≤ 2200.
-- **Horizon: 45 days max** (hard ceiling — `RESCHEDULE_HORIZON_MS`). Matches the
-  tenured `TierPolicy.can_schedule()` allowance.
+- **Horizon: 30 days max** (hard ceiling — `RESCHEDULE_HORIZON_MS`). Matches the
+  baseline `TierPolicy.can_schedule()` allowance.
 - **One D1 `UPDATE`, zero R2 calls.** Returns `{ ok, id, post_at, caption }`.
 
 ---
