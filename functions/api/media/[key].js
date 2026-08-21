@@ -31,8 +31,11 @@ const ALLOWED_CONTENT_TYPES = new Set([
 // The numeric form is still ACCEPTED so objects uploaded before the change keep
 // serving — a scheduled post that stops fetching is a failed publish for a creator who
 // did nothing wrong. New keys are always slugs.
+// The readable form is `<song>-by-<artist>-<20 hex>`; the words are decoration and the
+// 20 hex chars carry all 80 bits. `{1,60}` is bounded on purpose — an unbounded
+// character class in front of a fixed-width group is a backtracking trap.
 const KEY_SHAPE =
-  /^([0-9]+|[0-9a-f]{20})\/(reel|cover|carousel)\/[A-Za-z0-9._-]+\.(mp4|mov|jpg|jpeg|png)$/;
+  /^([0-9]+|[a-z-]{1,60}-[0-9a-f]{20}|[0-9a-f]{20})\/(reel|cover|carousel)\/[A-Za-z0-9._-]+\.(mp4|mov|jpg|jpeg|png)$/;
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {

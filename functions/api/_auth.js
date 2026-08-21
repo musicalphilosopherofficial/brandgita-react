@@ -1,3 +1,4 @@
+import { wordsFor } from './_slugwords.js';
 /**
  * Per-user bearer token auth for desktop → cloud API calls.
  *
@@ -50,16 +51,24 @@ export async function mediaSlug(env, igUserId) {
     false,
     ['sign'],
   );
-  const sig = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(`media-slug:v1:${igUserId}`),
+  const sig = new Uint8Array(
+    await crypto.subtle.sign(
+      'HMAC',
+      key,
+      new TextEncoder().encode(`media-slug:v1:${igUserId}`),
+    ),
   );
-  // 20 hex chars = 80 bits. Unguessable, and short enough to keep URLs readable.
-  return [...new Uint8Array(sig)]
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-    .slice(0, 20);
+  const hex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  // 20 hex chars = the first 10 bytes = 80 bits. THIS is the entire security of the
+  // slug: unguessable, and unique enough that a collision is not a real event.
+  const entropy = hex(sig.subarray(0, 10));
+
+  // The words are DECORATION and carry no security weight — a 16-pair list is 4 bits,
+  // and word-only slugs collide at ~100 users, which would be fatal because the prefix
+  // IS the tenancy check. They are drawn from byte 10, disjoint from the 10 bytes above,
+  // so the readable half reveals nothing that the visible hex does not already show.
+  return `${wordsFor(sig[10])}-${entropy}`;
 }
 
 export async function requireUserAuth(request, env) {
