@@ -1,0 +1,19 @@
+-- Apply with:
+--   npx wrangler d1 execute brandgita-waitlist --remote --file=./migrations/0007_ig_tokens_expiry_index.sql
+--
+-- WHY: the cron poster runs every minute and, on every tick, asks
+--
+--     SELECT ig_user_id, access_token FROM ig_tokens
+--     WHERE token_expiry <= datetime('now', '+7 days')
+--
+-- With no index on token_expiry that is a FULL TABLE SCAN, and D1 bills ROWS READ, not
+-- queries. So the scan costs one row read per user per minute — 43,200 reads per user
+-- per month for a query that almost always returns nothing.
+--
+-- On the free plan (5,000,000 rows read/day) that alone puts the ceiling at ~3,470
+-- creators, and D1 reads would be the FIRST limit hit — before requests, before storage,
+-- before anything to do with actual posting. Adding this index moves the same workload
+-- to ~2 rows/day and the ceiling to hundreds of thousands.
+--
+-- scheduled_posts already had its (post_at, status) index; ig_tokens was simply missed.
+CREATE INDEX IF NOT EXISTS idx_ig_tokens_expiry ON ig_tokens(token_expiry);
