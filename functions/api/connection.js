@@ -1,4 +1,4 @@
-import { requireUserAuth } from './_auth.js';
+import { mediaSlug, requireUserAuth } from './_auth.js';
 import { decryptToken } from './_crypto.js';
 
 // Instagram Graph host — matches token.js's /me call version.
@@ -104,6 +104,27 @@ export async function onRequest(context) {
   const quota_usage = bucket?.quota_usage ?? null;
   const quota_total = bucket?.config?.quota_total ?? null;
 
+  // media_slug is returned here as well as at connect, so a desktop holding a STALE slug
+  // self-heals on its next connection check instead of failing uploads.
+  //
+  // Without this the slug is issued exactly once, at /api/token, and cached in the
+  // desktop cred store forever. Any re-key — rotating MEDIA_SLUG_SECRET, or a future
+  // media-slug:v2 — would leave every installed app PUTting to a prefix the server no
+  // longer derives, so uploads 403 with no obvious cause and the only cure is
+  // disconnect-and-reconnect. Re-deriving it on a call the desktop already makes turns
+  // that from an outage into a no-op.
+  //
+  // Best-effort: this endpoint's job is to answer "can I publish right now". If the slug
+  // cannot be derived (no secret configured) that is worth knowing, but it must not turn
+  // a working connection check into a 500 — the desktop would report the creator's
+  // account as broken because of an unrelated server misconfiguration.
+  let media_slug = null;
+  try {
+    media_slug = await mediaSlug(env, auth.ig_user_id);
+  } catch (err) {
+    console.error('media slug derivation failed:', { message: err?.message });
+  }
+
   return json({
     ok: true,
     connected: true,
@@ -111,5 +132,6 @@ export async function onRequest(context) {
     expires_at,
     quota_usage,
     quota_total,
+    media_slug,
   });
 }

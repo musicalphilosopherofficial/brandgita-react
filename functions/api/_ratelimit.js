@@ -1,14 +1,26 @@
 /**
  * Rate limiting for Pages Functions, built on Cloudflare's native binding.
  *
- * ⚠️ FAIL-OPEN, DELIBERATELY. If the binding is absent this returns null (no limit)
- * rather than throwing. That is the right trade for THIS endpoint and worth stating
- * plainly, because fail-open is usually the wrong default:
+ * ⚠️ ON PAGES THIS IS CURRENTLY A NO-OP. Measured 2026-08-21 against production:
+ * twelve unauthenticated POSTs to /api/token returned twelve 401s and no 429. Wrangler
+ * also rejects the config outright — "Configuration file for Pages projects does not
+ * support ratelimits". The binding is a Workers feature; Pages does not take it.
  *
- *   - Pages Functions support for `[[ratelimits]]` is undocumented. If Pages silently
- *     ignores the binding, `env.X.limit()` is a TypeError on undefined — which would
- *     turn every call into a 500 and stop EVERY creator from connecting. A limiter that
- *     causes a total outage is worse than the abuse it prevents.
+ * Local evidence said the opposite, which is the lesson worth keeping: `wrangler pages
+ * dev` DOES wire the binding and DOES return 429 after 10 requests. Local dev is more
+ * permissive than the platform, so a limiter proven to work locally proves nothing about
+ * production. Only the live burst settled it.
+ *
+ * Actual rate limiting for Pages is a WAF Rate Limiting Rule in the dashboard (free plan:
+ * one rule). This module stays because it is correct, costs nothing while inert, and
+ * becomes live the moment the endpoint moves to a real Worker.
+ *
+ * ⚠️ FAIL-OPEN, DELIBERATELY — and that is the only reason the above was not an outage.
+ * If the binding is absent this returns null (no limit) rather than throwing:
+ *
+ *   - Had it failed closed, `env.X.limit()` on undefined would be a TypeError, turning
+ *     every /api/token call into a 500 and stopping EVERY creator from connecting. That
+ *     is exactly the situation Pages put us in, silently, on the first deploy.
  *   - The endpoint is already authenticated. The limiter is defence in depth against
  *     brute force, not the access control itself.
  *
