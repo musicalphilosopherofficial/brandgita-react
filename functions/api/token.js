@@ -1,4 +1,4 @@
-import { sha256Hex, requireUserAuth } from './_auth.js';
+import { mediaSlug, requireUserAuth, sha256Hex } from './_auth.js';
 import { encryptToken } from './_crypto.js';
 
 const CORS = {
@@ -146,26 +146,36 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Could not store token' }, 500);
   }
 
-  // Fetch the handle for display. Non-fatal: the connection is already stored, so a
-  // failed username lookup must not fail the whole call — the desktop just shows no @handle.
+  // Fetch the handle + profile picture for display. Non-fatal: the connection is already
+  // stored, so a failed lookup must not fail the whole call — the desktop just shows no
+  // @handle / no avatar. (profile_picture_url is why the connected-account icon was blank:
+  // the desktop can't fetch it itself — the access token lives here, server-side.)
   let username = null;
+  let profile_picture_url = null;
   try {
     const meUrl = new URL('https://graph.instagram.com/v22.0/me');
-    meUrl.searchParams.set('fields', 'username');
+    meUrl.searchParams.set('fields', 'username,profile_picture_url');
     meUrl.searchParams.set('access_token', access_token);
     const meRes = await fetch(meUrl.toString());
     if (meRes.ok) {
       const me = await meRes.json();
       username = me.username || null;
+      profile_picture_url = me.profile_picture_url || null;
     } else {
-      console.error('IG username fetch non-OK:', meRes.status);
+      console.error('IG me fetch non-OK:', meRes.status);
     }
   } catch (err) {
-    console.error('IG username fetch failed (non-fatal):', err);
+    console.error('IG me fetch failed (non-fatal):', err);
   }
 
   // Return the desktop_token — the desktop stores this in Electron safeStorage and
   // uses it as Authorization: Bearer <desktop_token> on all subsequent API calls.
   // The shared API_SECRET is no longer needed by the desktop after this point.
-  return json({ ok: true, ig_user_id, username, desktop_token, expires_in_days: Math.floor(expires_in / 86400) });
+  // media_slug is the opaque prefix the desktop must use when building media keys, so
+  // the raw ig_user_id never appears in a public media URL. The desktop cannot derive it
+  // (it has no API_SECRET, and must not), so the server hands it over once at connect
+  // time and the desktop stores it beside the token in safeStorage.
+  const media_slug = await mediaSlug(env, ig_user_id);
+
+  return json({ ok: true, ig_user_id, username, profile_picture_url, desktop_token, media_slug, expires_in_days: Math.floor(expires_in / 86400) });
 }

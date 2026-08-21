@@ -23,6 +23,45 @@ export async function sha256Hex(input) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Opaque per-user media slug — replaces the raw ig_user_id in public media URLs.
+ *
+ * THE PROBLEM: media keys were `{ig_user_id}/reel/{uuid}.mp4`, and those URLs are
+ * public by design (Instagram fetches them without credentials). So every media URL
+ * published the creator's Instagram account ID, and any two URLs sharing a prefix
+ * proved they belonged to the same person. The uuid protected the FILE; nothing
+ * protected the IDENTITY.
+ *
+ * HMAC rather than a random slug stored in D1, deliberately:
+ *   - no new table, no migration, no extra read on the hot path
+ *   - the server re-derives it from the AUTHENTICATED ig_user_id, so the prefix is
+ *     still a real tenancy check rather than a value the client asserts
+ *   - deterministic, so existing objects can be re-keyed by recomputation
+ * It is not reversible, and it does not need to be: every call already knows the
+ * ig_user_id from the bearer token.
+ */
+export async function mediaSlug(env, igUserId) {
+  const secret = env.API_SECRET;
+  if (!secret) throw new Error('API_SECRET is required to derive a media slug');
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`media-slug:v1:${igUserId}`),
+  );
+  // 20 hex chars = 80 bits. Unguessable, and short enough to keep URLs readable.
+  return [...new Uint8Array(sig)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 20);
+}
+
 export async function requireUserAuth(request, env) {
   const authHeader = request.headers.get('Authorization') || '';
   if (!authHeader.startsWith('Bearer ')) {

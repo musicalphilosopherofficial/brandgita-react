@@ -1,4 +1,4 @@
-import { requireUserAuth } from '../_auth.js';
+import { mediaSlug, requireUserAuth } from '../_auth.js';
 
 const CORS_WRITE = {
   'Access-Control-Allow-Origin': '*',
@@ -20,10 +20,19 @@ const ALLOWED_CONTENT_TYPES = new Set([
   'image/png',
 ]);
 
-// Keys must look like {ig_user_id}/{reel|cover|carousel}/{name}.{ext}.
-// Enforced on both PUT and GET so the endpoint can't be used to probe arbitrary
-// bucket contents, and so the only secrecy (the random suffix) is required.
-const KEY_SHAPE = /^[0-9]+\/(reel|cover|carousel)\/[A-Za-z0-9._-]+\.(mp4|mov|jpg|jpeg|png)$/;
+// Keys look like {prefix}/{reel|cover|carousel}/{name}.{ext}.
+//
+// The prefix is an opaque 20-hex media slug (see mediaSlug in ../_auth.js). It used to
+// be the raw ig_user_id, which meant every PUBLIC media URL — and these are public by
+// design, Instagram fetches them unauthenticated — published the creator's Instagram
+// account ID, and any two URLs sharing a prefix proved they were the same person. The
+// uuid protected the FILE; nothing protected the IDENTITY.
+//
+// The numeric form is still ACCEPTED so objects uploaded before the change keep
+// serving — a scheduled post that stops fetching is a failed publish for a creator who
+// did nothing wrong. New keys are always slugs.
+const KEY_SHAPE =
+  /^([0-9]+|[0-9a-f]{20})\/(reel|cover|carousel)\/[A-Za-z0-9._-]+\.(mp4|mov|jpg|jpeg|png)$/;
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -57,8 +66,11 @@ export async function onRequest(context) {
     const auth = await requireUserAuth(request, env);
     if (auth.error) return auth.error;
 
-    // Enforce key prefix — user can only write to their own {ig_user_id}/ prefix
-    if (!key.startsWith(`${auth.ig_user_id}/`)) {
+    // Enforce key prefix — a user may only write under their own prefix. The slug is
+    // RE-DERIVED from the authenticated ig_user_id, never taken from the request, so it
+    // remains a real tenancy check and not a value the client asserts about itself.
+    const slug = await mediaSlug(env, auth.ig_user_id);
+    if (!key.startsWith(`${slug}/`) && !key.startsWith(`${auth.ig_user_id}/`)) {
       return json({ ok: false, error: 'You can only upload to your own user prefix' }, 403);
     }
 
