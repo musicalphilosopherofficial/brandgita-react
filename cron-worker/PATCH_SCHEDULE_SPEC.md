@@ -97,7 +97,9 @@ a silent no-op.
 5. **Horizon:** reject `post_at` further ahead than the allowed window. The desktop side
    already owns this policy — `brand_gita_core/tiers.py::TierPolicy.can_schedule()`, 30
    days initially, rising to 45 on >2 months tenure later. The server should enforce its
-   own bound too rather than trusting the client; **30 days** matches today's policy.
+   own bound too rather than trusting the client; the server bound is **45 days** (the
+   tenured allowance — chosen over the 30-day baseline so reschedules aren't blocked
+   before the desktop tier catches up).
 
 ### Returns
 
@@ -122,7 +124,7 @@ Cases worth pinning:
 - `status: 'posted'` → 409, row unchanged
 - `status: 'posting'` → 409 (the mid-flight case)
 - `post_at` in the past → 400
-- `post_at` beyond the 30-day horizon → 400
+- `post_at` beyond the 45-day horizon → 400
 - body containing `asset_keys` → 400, row unchanged
 - unknown key in body → 400
 - `caption` over 2200 chars → 400 (same bound POST enforces)

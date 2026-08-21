@@ -7,10 +7,11 @@ const CORS = {
 };
 
 // Server-side scheduling horizon. Mirrors the desktop TierPolicy.can_schedule()
-// baseline (30 days) — the server enforces its own bound rather than trusting the
-// client. Kept independent of schedule.js's 60-day create window on purpose: create
-// bounds against the R2 lifecycle; reschedule bounds against product policy.
-const RESCHEDULE_HORIZON_MS = 30 * 24 * 60 * 60 * 1000;
+// tenured allowance (45 days) — the server enforces its own bound rather than
+// trusting the client. Kept independent of schedule.js's 60-day create window on
+// purpose: create bounds against the R2 lifecycle; reschedule bounds against
+// product policy.
+const RESCHEDULE_HORIZON_MS = 45 * 24 * 60 * 60 * 1000;
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -167,7 +168,7 @@ async function handlePatch(context) {
     return json({ ok: false, error: 'post_at must be in the future' }, 400);
   }
   if (postAtMs > nowMs + RESCHEDULE_HORIZON_MS) {
-    return json({ ok: false, error: 'post_at cannot be more than 30 days in the future' }, 400);
+    return json({ ok: false, error: 'post_at cannot be more than 45 days in the future' }, 400);
   }
 
   // caption is optional; when present it obeys the same bound POST enforces.
