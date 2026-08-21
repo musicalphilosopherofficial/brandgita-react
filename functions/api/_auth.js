@@ -42,8 +42,22 @@ export async function sha256Hex(input) {
  * ig_user_id from the bearer token.
  */
 export async function mediaSlug(env, igUserId) {
-  const secret = env.API_SECRET;
-  if (!secret) throw new Error('API_SECRET is required to derive a media slug');
+  // MEDIA_SLUG_SECRET is separate from API_SECRET on purpose.
+  //
+  // API_SECRET gates /api/token, which mints a bearer token for ANY user — so it is the
+  // secret you most want to be able to rotate, especially in a hurry. But the slug is
+  // derived from it and R2 objects are stored under the derived prefix, so rotating it
+  // re-slugs every creator while their uploaded media keeps the old prefix: every
+  // scheduled post 404s and silently fails to publish. Sharing one secret between a
+  // rotatable credential and a durable storage key makes the credential un-rotatable.
+  //
+  // The fallback keeps today's slugs byte-identical while MEDIA_SLUG_SECRET is unset.
+  // SETTING IT IS A RE-KEY EVENT — every slug changes — so it must be done while the
+  // bucket is effectively empty (i.e. now, pre-launch) or paired with a re-key pass.
+  const secret = env.MEDIA_SLUG_SECRET || env.API_SECRET;
+  if (!secret) {
+    throw new Error('MEDIA_SLUG_SECRET (or API_SECRET) is required to derive a media slug');
+  }
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
