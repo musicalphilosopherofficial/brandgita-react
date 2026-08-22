@@ -22,7 +22,7 @@ function whopActiveMock(url) {
     return { status: 201, ok: true, json: async () => ({}) };
   }
   if (u.includes('api.whop.com')) {
-    return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', user: { id: 'whopuser_test', email: 'c@example.com' } }) };
+    return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: { id: 'whopuser_test', email: 'c@example.com' } }) };
   }
   return null;
 }
@@ -215,7 +215,7 @@ test('a licence already bound to a DIFFERENT device is rejected with 409', async
     const u = String(url);
     if (u.includes('validate_license')) return { status: 400, ok: false, json: async () => ({}) };
     if (u.includes('api.whop.com')) {
-      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', user: { id: 'u' } }) };
+      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: { id: 'u' } }) };
     }
     throw new Error('IG must never be reached once the device check fails');
   };
@@ -245,7 +245,7 @@ test('a 401 from validate_license (missing member:manage) fails closed, not open
     const u = String(url);
     if (u.includes('validate_license')) return { status: 401, ok: false, json: async () => ({}) };
     if (u.includes('api.whop.com')) {
-      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', user: { id: 'u' } }) };
+      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: { id: 'u' } }) };
     }
     throw new Error('IG must never be reached if the device check cannot be performed');
   };

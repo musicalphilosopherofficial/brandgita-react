@@ -9,7 +9,7 @@ function mockFetch(status, body) {
 
 test('an active membership is accepted and its identity extracted', async () => {
   globalThis.fetch = mockFetch(200, {
-    id: 'mem_abc', status: 'active', user: { id: 'user_1', email: 'a@b.com' },
+    id: 'mem_abc', status: 'active', valid: true, user: { id: 'user_1', email: 'a@b.com' },
   });
   const r = await checkWhopLicense('lic_valid', { WHOP_COMPANY_API: 'k' });
   assert.deepEqual(r, { ok: true, membershipId: 'mem_abc', whopUserId: 'user_1', email: 'a@b.com' });
@@ -22,11 +22,24 @@ test('a 404 from Whop -> 402 "not found", not a raw pass-through', async () => {
   assert.equal(r.status, 402);
 });
 
-test('a cancelled membership is rejected even though Whop found it', async () => {
-  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'canceled', user: { id: 'u' } });
+test('a cancelled membership (valid:false) is rejected even though Whop found it', async () => {
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'canceled', valid: false, user: { id: 'u' } });
   const r = await checkWhopLicense('lic_cancelled', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 402);
+});
+
+test('REGRESSION: status="completed" + valid:true is ACCEPTED — a real trial membership on '
+  + 'this account returns exactly this shape, and gating on status alone would reject it', async () => {
+  // Pinned to a real API response captured 2026-08-22 (membership mem_oBHeJeRZNqmKUl),
+  // not a guess — status vocabulary varies by plan/payment type and is not the signal.
+  globalThis.fetch = mockFetch(200, {
+    id: 'mem_oBHeJeRZNqmKUl', status: 'completed', valid: true,
+    user: { id: 'user_mvI3tlVgBiCNU', email: 'utsavother16@gmail.com' },
+  });
+  const r = await checkWhopLicense('B-1D6B09-5C997A94-F155F5W', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, true);
+  assert.equal(r.membershipId, 'mem_oBHeJeRZNqmKUl');
 });
 
 test('missing license_key is rejected before any network call', async () => {
@@ -52,7 +65,7 @@ test('a network failure fails CLOSED — unreachable Whop must not grant access'
 });
 
 test('a malformed 200 (no user.id) is rejected rather than trusted', async () => {
-  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'active', user: {} });
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'active', valid: true, user: {} });
   const r = await checkWhopLicense('lic_x', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 502);

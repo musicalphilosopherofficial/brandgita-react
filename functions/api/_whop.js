@@ -59,10 +59,13 @@ export async function checkWhopLicense(licenseKey, env) {
     return { ok: false, status: 502, error: 'Malformed response from Whop' };
   }
 
-  if (data?.status !== 'active') {
-    // Covers 'canceled' and any other non-active status alike — a lapsed trial and a
-    // cancelled subscription both mean "not entitled right now", and the desktop only
-    // needs one message either way ("reconnect once you're active on Whop").
+  // `valid`, NOT `status`. Confirmed against a REAL membership 2026-08-22: a free-trial
+  // membership on this account returns status:"completed" (not "active") while
+  // valid:true — so checking status==='active' would have REJECTED a legitimate,
+  // currently-entitled customer. `valid` is the field Whop documents as the actual
+  // access signal; status vocabulary varies by plan/payment type (trial, free,
+  // paid-recurring can each report a different string) and is not safe to gate on.
+  if (data?.valid !== true) {
     return { ok: false, status: 402, error: 'Membership is not active' };
   }
   if (!data.id || !data.user?.id) {
