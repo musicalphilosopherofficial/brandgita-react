@@ -1,4 +1,5 @@
 import { mediaSlug, requireUserAuth } from './_auth.js';
+import { validateDevice } from './_whop.js';
 import { decryptToken } from './_crypto.js';
 
 // Instagram Graph host — matches token.js's /me call version.
@@ -44,6 +45,55 @@ export async function onRequest(context) {
   const auth = await requireUserAuth(request, env);
   if (auth.error) return auth.error;
   const { ig_user_id } = auth;
+
+  // DEVICE RE-VALIDATION — the enforcement point for a licence that has moved machines.
+  //
+  // The device lock is otherwise checked ONCE, at connect. Clearing a licence's hwid and
+  // rebinding it to Machine B never touches Machine A's desktop_token, so Machine A would
+  // keep publishing indefinitely — it holds a valid token and, before this, had no reason
+  // to ever re-check. (Cancellation is already handled: the membership.deactivated webhook
+  // nulls the token server-side, so those calls 401 on their own. It is specifically the
+  // device SWAP that had no enforcement.)
+  //
+  // This endpoint is the right place because the desktop ALREADY calls it as a publish
+  // pre-flight — turning an existing call into the enforcement point costs nothing, where
+  // a dedicated heartbeat loop would add a request per install per interval forever.
+  //
+  // OPTIONAL, deliberately. An older desktop build that sends no device_hash still gets a
+  // working connection check rather than a hard failure: this is a pre-flight whose job is
+  // "can I publish", and bricking older installs over a header they cannot know about is
+  // a worse outcome than a slightly later catch. Those builds are still gated at connect,
+  // and /api/token hard-REQUIRES device_hash — so a stale build can keep publishing on an
+  // already-bound machine, but can never bind a new one.
+  const deviceHash = request.headers.get('x-device-hash');
+  if (deviceHash) {
+    let licenceRow;
+    try {
+      licenceRow = await env.DB.prepare(
+        `SELECT whop_license_key FROM ig_tokens WHERE ig_user_id = ?`
+      ).bind(ig_user_id).first();
+    } catch (err) {
+      console.error('D1 select error (device check):', { message: err?.message });
+      licenceRow = null; // fall through — see below
+    }
+
+    // Only enforce when we actually know which licence this install belongs to. A row
+    // predating the Whop work has no whop_license_key, and refusing those would lock out
+    // an existing creator over a column that did not exist when they connected.
+    if (licenceRow?.whop_license_key) {
+      const check = await validateDevice(licenceRow.whop_license_key, deviceHash, env);
+      if (!check.ok && check.status === 409) {
+        // 409 specifically — the licence is bound to a DIFFERENT machine. Any other
+        // failure (Whop unreachable, missing scope) must NOT lock a paying creator out of
+        // their own app: this is a convenience re-check, and the authoritative gate is
+        // still /api/token at connect.
+        return json(
+          { ok: true, connected: false, publishable: false, reason: 'device_moved' },
+          200,
+        );
+      }
+    }
+  }
 
   let row;
   try {
