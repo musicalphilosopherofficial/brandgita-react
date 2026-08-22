@@ -152,29 +152,49 @@ function membershipResponse(overrides = {}) {
   };
 }
 
-test('a first-ever reset (no last_reset_at) succeeds and stamps the time', async () => {
+function fakeDB(rows = {}) {
+  const inserts = [];
+  return {
+    inserts,
+    prepare(sql) {
+      return {
+        bind: (...args) => ({
+          async first() {
+            if (sql.includes('SELECT')) return rows[args[0]] ?? null;
+            return null;
+          },
+          async run() {
+            if (sql.includes('INSERT')) inserts.push(args);
+            return {};
+          },
+        }),
+      };
+    },
+  };
+}
+
+test('a first-ever reset (no cooldown row) succeeds and PATCHes an empty metadata wipe', async () => {
   let patchBody;
   globalThis.fetch = async (url, opts) => {
-    if (opts?.method === 'PATCH') {
-      patchBody = JSON.parse(opts.body);
-      return new Response('{}', { status: 200 });
-    }
-    return new Response(JSON.stringify(membershipResponse({ metadata: { hwid: 'old-device' } })), { status: 200 });
+    if (opts?.method === 'PATCH') { patchBody = JSON.parse(opts.body); return new Response('{}', { status: 200 }); }
+    return new Response(JSON.stringify(membershipResponse()), { status: 200 });
   };
-  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  const db = fakeDB();
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: db });
   assert.deepEqual(r, { ok: true });
-  assert.ok(!('hwid' in patchBody.metadata), 'hwid must be cleared');
-  assert.ok(patchBody.metadata.last_reset_at, 'must stamp a new reset time');
+  assert.deepEqual(patchBody, { metadata: {} });
+  assert.equal(db.inserts.length, 1, 'must stamp the cooldown after a successful reset');
 });
 
-test('a reset inside the 30-day cooldown is rejected with 429, and touches nothing', async () => {
-  const recentReset = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days ago
+test('a reset inside the 30-day cooldown is rejected with 429 and never touches Whop', async () => {
+  const recentReset = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const db = fakeDB({ mem_x: { last_reset_at: recentReset } });
   let patchCalled = false;
   globalThis.fetch = async (url, opts) => {
     if (opts?.method === 'PATCH') { patchCalled = true; return new Response('{}', { status: 200 }); }
-    return new Response(JSON.stringify(membershipResponse({ metadata: { last_reset_at: recentReset } })), { status: 200 });
+    return new Response(JSON.stringify(membershipResponse({ id: 'mem_x' })), { status: 200 });
   };
-  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: db });
   assert.equal(r.ok, false);
   assert.equal(r.status, 429);
   assert.match(r.error, /\d+ day/);
@@ -182,42 +202,53 @@ test('a reset inside the 30-day cooldown is rejected with 429, and touches nothi
 });
 
 test('a reset PAST the 30-day cooldown succeeds', async () => {
-  const oldReset = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(); // 31 days ago
+  const oldReset = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+  const db = fakeDB({ mem_x: { last_reset_at: oldReset } });
   globalThis.fetch = async (url, opts) => {
     if (opts?.method === 'PATCH') return new Response('{}', { status: 200 });
-    return new Response(JSON.stringify(membershipResponse({ metadata: { hwid: 'x', last_reset_at: oldReset } })), { status: 200 });
+    return new Response(JSON.stringify(membershipResponse({ id: 'mem_x' })), { status: 200 });
   };
-  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: db });
   assert.equal(r.ok, true);
 });
 
-test('a DEAD subscription cannot consume a reset — rejected before any PATCH', async () => {
+test('a DEAD subscription cannot consume a reset — rejected before touching D1 or Whop', async () => {
   let patchCalled = false;
   globalThis.fetch = async (url, opts) => {
     if (opts?.method === 'PATCH') { patchCalled = true; return new Response('{}', { status: 200 }); }
     return new Response(JSON.stringify(membershipResponse({ valid: false, status: 'canceled' })), { status: 200 });
   };
-  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: fakeDB() });
   assert.equal(r.ok, false);
   assert.equal(r.status, 402);
   assert.match(r.error, /canceled/);
   assert.equal(patchCalled, false);
 });
 
-test('other metadata keys survive a reset untouched', async () => {
+test('the PATCH body is always an unconditional empty wipe — never a merge attempt', async () => {
   let patchBody;
   globalThis.fetch = async (url, opts) => {
     if (opts?.method === 'PATCH') { patchBody = JSON.parse(opts.body); return new Response('{}', { status: 200 }); }
-    return new Response(JSON.stringify(membershipResponse({ metadata: { hwid: 'old', some_other_key: 'keep-me' } })), { status: 200 });
+    return new Response(JSON.stringify(membershipResponse({ metadata: { hwid: 'whatever' } })), { status: 200 });
   };
-  await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
-  assert.equal(patchBody.metadata.some_other_key, 'keep-me');
-  assert.ok(!('hwid' in patchBody.metadata));
+  await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: fakeDB() });
+  assert.deepEqual(patchBody, { metadata: {} });
+});
+
+test('the PATCH targets the v1 endpoint, not v2 — v2 needs a permission that never worked', async () => {
+  let capturedUrl;
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'PATCH') { capturedUrl = url; return new Response('{}', { status: 200 }); }
+    return new Response(JSON.stringify(membershipResponse()), { status: 200 });
+  };
+  await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: fakeDB() });
+  assert.ok(String(capturedUrl).includes('/api/v1/memberships/'));
+  assert.ok(!String(capturedUrl).includes('/api/v2/memberships/') || String(capturedUrl).includes('/api/v1/'));
 });
 
 test('a not-found license fails the same way checkWhopLicense already does', async () => {
   globalThis.fetch = async () => new Response('{}', { status: 404 });
-  const r = await resetDeviceLock('lic_bad', { WHOP_COMPANY_API: 'k' });
+  const r = await resetDeviceLock('lic_bad', { WHOP_COMPANY_API: 'k', DB: fakeDB() });
   assert.equal(r.ok, false);
   assert.equal(r.status, 402);
 });
@@ -228,12 +259,37 @@ test('missing WHOP_COMPANY_API fails closed at the entitlement check', async () 
   assert.equal(r.status, 503);
 });
 
-test('a PATCH failure after a successful entitlement+cooldown check is reported, not silently ok', async () => {
+test('missing DB binding fails closed rather than skipping the cooldown', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify(membershipResponse()), { status: 200 });
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' }); // no DB
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 503);
+});
+
+test('a PATCH failure is reported and the cooldown is NOT stamped for a reset that never happened', async () => {
+  const db = fakeDB();
   globalThis.fetch = async (url, opts) => {
     if (opts?.method === 'PATCH') return new Response('{}', { status: 500 });
     return new Response(JSON.stringify(membershipResponse()), { status: 200 });
   };
-  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: db });
   assert.equal(r.ok, false);
   assert.equal(r.status, 502);
+  assert.equal(db.inserts.length, 0, 'must not start a cooldown timer for a reset that failed');
+});
+
+test('a D1 cooldown-write failure does not undo an already-successful Whop reset', async () => {
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'PATCH') return new Response('{}', { status: 200 });
+    return new Response(JSON.stringify(membershipResponse()), { status: 200 });
+  };
+  const db = fakeDB();
+  db.prepare = (sql) => ({
+    bind: () => ({
+      async first() { return null; },
+      async run() { throw new Error('D1 write failed'); },
+    }),
+  });
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: db });
+  assert.equal(r.ok, true, 'the reset already happened on Whop — must not report failure');
 });

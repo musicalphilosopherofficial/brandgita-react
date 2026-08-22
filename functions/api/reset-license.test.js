@@ -3,7 +3,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequest } from './reset-license.js';
 
-const ENV = { API_SECRET: 'test-secret', WHOP_COMPANY_API: 'whop-key' };
+function fakeDB(rows = {}) {
+  return {
+    prepare(sql) {
+      return {
+        bind: (...args) => ({
+          async first() { return sql.includes('SELECT') ? (rows[args[0]] ?? null) : null; },
+          async run() { return {}; },
+        }),
+      };
+    },
+  };
+}
+
+const ENV = { API_SECRET: 'test-secret', WHOP_COMPANY_API: 'whop-key', DB: fakeDB() };
 
 function ctx(body, { secret = 'test-secret', method = 'POST' } = {}) {
   return {
@@ -46,8 +59,9 @@ test('missing license_key is rejected with 400', async () => {
 
 test('a cooldown rejection from resetDeviceLock passes through as 429', async () => {
   const recent = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  globalThis.fetch = async () => new Response(JSON.stringify(membershipResponse({ metadata: { last_reset_at: recent } })), { status: 200 });
-  const res = await onRequest(ctx({ license_key: 'lic_x' }));
+  globalThis.fetch = async () => new Response(JSON.stringify(membershipResponse()), { status: 200 });
+  const cooldownEnv = { ...ENV, DB: fakeDB({ mem_x: { last_reset_at: recent } }) };
+  const res = await onRequest({ ...ctx({ license_key: 'lic_x' }), env: cooldownEnv });
   const data = await res.json();
   assert.equal(res.status, 429);
   assert.match(data.error, /day/);

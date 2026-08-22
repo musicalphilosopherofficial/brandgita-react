@@ -18,6 +18,18 @@
 
 const WHOP_API_BASE = 'https://api.whop.com/api/v2';
 
+// The metadata-clearing PATCH is a DIFFERENT API version from everything else in this
+// file. v2's PATCH /memberships/{id} needs `membership:update`, a permission that stayed
+// 401 despite being reported enabled twice. v1's PATCH /memberships/{id} does the exact
+// same thing — accepts the mem_ id or license key, same {"metadata": {...}} body — but
+// only needs member:manage/member:basic:read/member:email:read, the three permissions
+// already confirmed working via validate_license. Confirmed live 2026-08-22: v1 PATCH
+// returned 200 and cleared metadata on the real membership, with the SAME key that 401'd
+// on v2. GET (checkWhopLicense) and POST .../validate_license (validateDevice) stay on
+// v2 — only this one write moves. v1's response SHAPE also differs completely (user_id
+// not user, no `valid` field, top-level fields instead of nested) — irrelevant here since
+// this call only needs the PATCH to succeed, not to parse its response body.
+
 /**
  * @returns {Promise<{ok: true, membershipId: string, whopUserId: string, email: string|null}
  *                  | {ok: false, status: number, error: string}>}
@@ -187,44 +199,47 @@ export async function validateDevice(membershipId, deviceHash, env) {
 const RESET_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /**
- * Clear a licence's device binding for the "I got a new machine" flow —
- * `PATCH /memberships/{id}` with the current metadata minus `hwid`, plus a fresh
- * `last_reset_at` stamp.
+ * Clear a licence's device binding for the "I got a new machine" flow.
  *
- * Confirmed live 2026-08-22 against a real membership, full mechanical cycle: reset ->
- * rebind to a NEW device (201) -> re-lock enforced against a THIRD device (400). Needs
- * `membership:update` — a THIRD distinct permission beyond member:basic:read/
- * member:email:read (the read lookup) and member:manage (validate_license).
+ * Two systems, two jobs, deliberately not one:
+ *   - WHOP owns the device binding (`hwid` in its membership metadata) — cleared via
+ *     `PATCH /api/v1/memberships/{id}` with `{"metadata": {}}`.
+ *   - WE own the cooldown timer (`whop_license_resets` in D1) — because that same PATCH
+ *     is confirmed live (2026-08-22) to be ALL-OR-NOTHING: an empty metadata object wipes
+ *     everything, a non-empty one MERGES and cannot delete one key while keeping another.
+ *     There is no way to clear `hwid` while preserving a `last_reset_at` marker inside
+ *     the same Whop object, so the cooldown cannot live there. An earlier version of this
+ *     function tried exactly that and silently failed to ever clear `hwid` at all.
  *
- * TWO GUARDS beyond the mechanical reset itself, both real requirements, not decoration:
- *
- * 1. COOLDOWN. `last_reset_at` is preserved ACROSS resets specifically so this works —
- *    PATCH replaces the whole metadata object, so a naive "clear hwid" implementation
- *    would erase its own cooldown marker on every call and never actually cool down.
- *    Stored as a metadata key (not our own DB) because it travels with the same object
- *    `validate_license` already writes to, so there is exactly one source of truth for
- *    "what does this licence's device state look like" — not two systems that can drift.
- *
- * 2. ENTITLEMENT. Reuses `checkWhopLicense()` — the SAME `valid` check every other Whop
- *    gate in this codebase uses — rather than a second, independently-reasoned status
- *    check. A dead subscription must not be able to consume a reset at all, and the
- *    decision for "is this subscription alive" must not live in two places that could
- *    answer differently.
- *
- * DELIBERATELY NOT WIRED to any endpoint yet by ITSELF — see reset-license.js, the
- * endpoint that gates who may call this and rate-limits the route itself.
+ * The v1/v2 split is real and deliberate, not a typo: v2's PATCH needs `membership:update`
+ * (never confirmed working despite being reported enabled twice); v1's PATCH does the
+ * identical operation with `member:manage`/`member:basic:read`/`member:email:read` — the
+ * three permissions already confirmed working via `validate_license`. GET (checkWhopLicense)
+ * and POST .../validate_license (validateDevice) stay on v2, which is unaffected by any
+ * of this and already proven correct.
  */
 export async function resetDeviceLock(licenseKey, env) {
   const licenseCheck = await checkWhopLicense(licenseKey, env);
   if (!licenseCheck.ok) {
-    // Covers "not found" and "not entitled" alike — checkWhopLicense already produces
-    // the right status/message for both, including the friendlier status-labelled error.
     return licenseCheck;
   }
+  if (!env.DB) {
+    console.error('resetDeviceLock called without a DB binding — cannot enforce cooldown');
+    return { ok: false, status: 503, error: 'Reset not available' };
+  }
 
-  const lastReset = licenseCheck.metadata?.last_reset_at;
-  if (lastReset) {
-    const elapsedMs = Date.now() - new Date(lastReset).getTime();
+  let cooldownRow;
+  try {
+    cooldownRow = await env.DB.prepare(
+      `SELECT last_reset_at FROM whop_license_resets WHERE membership_id = ?`
+    ).bind(licenseCheck.membershipId).first();
+  } catch (err) {
+    console.error('D1 read failed (whop_license_resets):', { message: err?.message });
+    return { ok: false, status: 502, error: 'Could not check reset cooldown' };
+  }
+
+  if (cooldownRow?.last_reset_at) {
+    const elapsedMs = Date.now() - new Date(cooldownRow.last_reset_at).getTime();
     if (Number.isFinite(elapsedMs) && elapsedMs < RESET_COOLDOWN_MS) {
       const daysLeft = Math.ceil((RESET_COOLDOWN_MS - elapsedMs) / (24 * 60 * 60 * 1000));
       return {
@@ -239,23 +254,20 @@ export async function resetDeviceLock(licenseKey, env) {
     return { ok: false, status: 503, error: 'License checking not configured' };
   }
 
-  // Preserve every OTHER metadata key — this PATCH must not silently discard something
-  // else that started living in this object later. Only `hwid` is deliberately dropped
-  // (that is the whole point of a reset) and `last_reset_at` is deliberately overwritten.
-  const { hwid: _hwid, ...preserved } = licenseCheck.metadata || {};
-  const newMetadata = { ...preserved, last_reset_at: new Date().toISOString() };
-
   let res;
   try {
     res = await fetch(
-      `${WHOP_API_BASE}/memberships/${encodeURIComponent(licenseCheck.membershipId)}`,
+      `https://api.whop.com/api/v1/memberships/${encodeURIComponent(licenseCheck.membershipId)}`,
       {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${env.WHOP_COMPANY_API}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ metadata: newMetadata }),
+        // Unconditionally empty — this is the ONLY body shape confirmed to actually clear
+        // the binding. We never had another metadata key of our own to preserve here in
+        // the first place; `hwid` is the sole key `validate_license` ever writes.
+        body: JSON.stringify({ metadata: {} }),
       },
     );
   } catch (err) {
@@ -267,5 +279,21 @@ export async function resetDeviceLock(licenseKey, env) {
     console.error('Whop device-lock reset non-OK:', { status: res.status });
     return { ok: false, status: 502, error: 'Reset failed' };
   }
+
+  // Stamp the cooldown AFTER Whop confirms the reset, not before — a failed PATCH must
+  // not start a 30-day timer for something that never actually happened.
+  try {
+    await env.DB.prepare(
+      `INSERT INTO whop_license_resets (membership_id, last_reset_at) VALUES (?, ?)
+       ON CONFLICT(membership_id) DO UPDATE SET last_reset_at = excluded.last_reset_at`
+    ).bind(licenseCheck.membershipId, new Date().toISOString()).run();
+  } catch (err) {
+    // The reset itself already succeeded on Whop's side — do not fail the whole
+    // operation over a bookkeeping write. Logged loudly: a missed stamp means the NEXT
+    // reset attempt will not be cooldown-blocked, which is a real (if narrow) gap, not
+    // nothing.
+    console.error('Failed to record reset cooldown (reset itself succeeded):', { message: err?.message });
+  }
+
   return { ok: true };
 }
