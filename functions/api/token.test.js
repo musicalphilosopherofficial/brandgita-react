@@ -22,7 +22,7 @@ function whopActiveMock(url) {
     return { status: 201, ok: true, json: async () => ({}) };
   }
   if (u.includes('api.whop.com')) {
-    return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: { id: 'whopuser_test', email: 'c@example.com' } }) };
+    return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: 'whopuser_test', email: 'c@example.com' }) };
   }
   return null;
 }
@@ -159,7 +159,7 @@ test('a lapsed/invalid license_key blocks connect BEFORE the OAuth code is consu
   globalThis.fetch = async (url) => {
     seen.push(String(url));
     if (String(url).includes('api.whop.com')) {
-      return { ok: true, json: async () => ({ id: 'mem_x', status: 'canceled', user: { id: 'u' } }) };
+      return { ok: true, json: async () => ({ id: 'mem_x', status: 'canceled', valid: false, user: 'u' }) };
     }
     throw new Error('IG must never be reached if the license is invalid');
   };
@@ -215,7 +215,7 @@ test('a licence already bound to a DIFFERENT device is rejected with 409', async
     const u = String(url);
     if (u.includes('validate_license')) return { status: 400, ok: false, json: async () => ({}) };
     if (u.includes('api.whop.com')) {
-      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: { id: 'u' } }) };
+      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: 'u' }) };
     }
     throw new Error('IG must never be reached once the device check fails');
   };
@@ -245,7 +245,7 @@ test('a 401 from validate_license (missing member:manage) fails closed, not open
     const u = String(url);
     if (u.includes('validate_license')) return { status: 401, ok: false, json: async () => ({}) };
     if (u.includes('api.whop.com')) {
-      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: { id: 'u' } }) };
+      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: 'u' }) };
     }
     throw new Error('IG must never be reached if the device check cannot be performed');
   };

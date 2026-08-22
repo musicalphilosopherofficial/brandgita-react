@@ -9,7 +9,7 @@ function mockFetch(status, body) {
 
 test('an active membership is accepted and its identity extracted', async () => {
   globalThis.fetch = mockFetch(200, {
-    id: 'mem_abc', status: 'active', valid: true, user: { id: 'user_1', email: 'a@b.com' },
+    id: 'mem_abc', status: 'active', valid: true, user: 'user_1', email: 'a@b.com',
   });
   const r = await checkWhopLicense('lic_valid', { WHOP_COMPANY_API: 'k' });
   assert.deepEqual(r, { ok: true, membershipId: 'mem_abc', whopUserId: 'user_1', email: 'a@b.com' });
@@ -23,7 +23,7 @@ test('a 404 from Whop -> 402 "not found", not a raw pass-through', async () => {
 });
 
 test('a cancelled membership (valid:false) is rejected even though Whop found it', async () => {
-  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'canceled', valid: false, user: { id: 'u' } });
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'canceled', valid: false, user: 'u' });
   const r = await checkWhopLicense('lic_cancelled', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 402);
@@ -35,7 +35,7 @@ test('REGRESSION: status="completed" + valid:true is ACCEPTED — a real trial m
   // not a guess — status vocabulary varies by plan/payment type and is not the signal.
   globalThis.fetch = mockFetch(200, {
     id: 'mem_oBHeJeRZNqmKUl', status: 'completed', valid: true,
-    user: { id: 'user_mvI3tlVgBiCNU', email: 'utsavother16@gmail.com' },
+    user: 'user_mvI3tlVgBiCNU', email: 'utsavother16@gmail.com',
   });
   const r = await checkWhopLicense('B-1D6B09-5C997A94-F155F5W', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, true);
@@ -64,8 +64,8 @@ test('a network failure fails CLOSED — unreachable Whop must not grant access'
   assert.equal(r.status, 502);
 });
 
-test('a malformed 200 (no user.id) is rejected rather than trusted', async () => {
-  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'active', valid: true, user: {} });
+test('a malformed 200 (no user field at all) is rejected rather than trusted', async () => {
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'active', valid: true });
   const r = await checkWhopLicense('lic_x', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 502);
@@ -75,7 +75,7 @@ test('the license key is URL-encoded into the request path', async () => {
   let capturedUrl;
   globalThis.fetch = async (url) => {
     capturedUrl = url;
-    return new Response(JSON.stringify({ id: 'm', status: 'active', user: { id: 'u' } }), { status: 200 });
+    return new Response(JSON.stringify({ id: 'm', status: 'active', valid: true, user: 'u' }), { status: 200 });
   };
   await checkWhopLicense('lic/with spaces', { WHOP_COMPANY_API: 'k' });
   assert.ok(!capturedUrl.includes('lic/with spaces'));
@@ -120,14 +120,18 @@ test('missing WHOP_COMPANY_API fails closed with 503', async () => {
   assert.equal(r.status, 503);
 });
 
-test('sends the metadata as {device_hash}, not the raw value under a different key', async () => {
+test('sends the metadata under Whop\'s own `hwid` key, not an invented one', async () => {
+  // This is not a style preference — an earlier version used `device_hash`, and every
+  // call against a REAL, already-bound membership came back as a mismatch even for the
+  // identical value, because Whop compares the whole metadata object and the key
+  // differed from whatever was already stored. Confirmed live 2026-08-22.
   let capturedBody;
   globalThis.fetch = async (url, opts) => {
     capturedBody = JSON.parse(opts.body);
     return new Response('{}', { status: 201 });
   };
   await validateDevice('mem_x', 'the-hash', { WHOP_COMPANY_API: 'k' });
-  assert.deepEqual(capturedBody, { metadata: { device_hash: 'the-hash' } });
+  assert.deepEqual(capturedBody, { metadata: { hwid: 'the-hash' } });
 });
 
 test('a network failure fails closed', async () => {

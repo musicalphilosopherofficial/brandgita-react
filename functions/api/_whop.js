@@ -68,7 +68,15 @@ export async function checkWhopLicense(licenseKey, env) {
   if (data?.valid !== true) {
     return { ok: false, status: 402, error: 'Membership is not active' };
   }
-  if (!data.id || !data.user?.id) {
+
+  // `user` is a BARE STRING (the user id) on this endpoint, not a nested {id, email}
+  // object — and `email` is a TOP-LEVEL field. Confirmed against a real membership
+  // 2026-08-22 after this exact mismatch took the live endpoint down with a false
+  // "Malformed membership" 502: the webhook payload (functions/api/whop/webhook.js) DOES
+  // carry a nested user object with email inside it, and that shape was wrongly assumed
+  // here too. Two different Whop surfaces, two different shapes for "user" — do not
+  // assume they match just because both come from Whop.
+  if (!data.id || !data.user) {
     console.error('Whop membership missing expected fields', { hasId: !!data.id, hasUser: !!data.user });
     return { ok: false, status: 502, error: 'Malformed membership from Whop' };
   }
@@ -76,8 +84,8 @@ export async function checkWhopLicense(licenseKey, env) {
   return {
     ok: true,
     membershipId: data.id,
-    whopUserId: data.user.id,
-    email: typeof data.user.email === 'string' ? data.user.email.slice(0, 320) : null,
+    whopUserId: data.user,
+    email: typeof data.email === 'string' ? data.email.slice(0, 320) : null,
   };
 }
 
@@ -88,6 +96,15 @@ export async function checkWhopLicense(licenseKey, env) {
  * machine identifier — never the raw identifier. Whop stores whatever we send as opaque
  * metadata; sending a raw hardware ID would mean a third party (Whop) holds a real
  * device fingerprint of the creator's machine for no functional benefit over a hash.
+ *
+ * Sent under the key `hwid` — Whop's own documented/example field name for this exact
+ * purpose, not an invented one. This matters more than it looks: the field name is part
+ * of what gets compared for equality, so a homegrown key name can never match anything
+ * already bound under Whop's own convention (or whatever a support flow / dashboard tool
+ * might read or write). Confirmed the hard way 2026-08-22 — an earlier version of this
+ * function used `device_hash` and every call against a real, already-bound membership
+ * came back as a mismatch, even calls with the identical value, because the KEY differed
+ * from what was already stored.
  *
  * Response contract (confirmed against Whop's docs, NOT yet exercised against a real
  * membership — no customer has connected a second device yet to prove the 400 path):
@@ -120,7 +137,7 @@ export async function validateDevice(membershipId, deviceHash, env) {
           Authorization: `Bearer ${env.WHOP_COMPANY_API}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ metadata: { device_hash: deviceHash } }),
+        body: JSON.stringify({ metadata: { hwid: deviceHash } }),
       },
     );
   } catch (err) {
