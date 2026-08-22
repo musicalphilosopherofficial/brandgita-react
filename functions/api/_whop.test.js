@@ -1,0 +1,125 @@
+// Tests for checkWhopLicense — run with: node --test functions/api/_whop.test.js
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { checkWhopLicense } from './_whop.js';
+
+function mockFetch(status, body) {
+  return async () => new Response(JSON.stringify(body), { status });
+}
+
+test('an active membership is accepted and its identity extracted', async () => {
+  globalThis.fetch = mockFetch(200, {
+    id: 'mem_abc', status: 'active', user: { id: 'user_1', email: 'a@b.com' },
+  });
+  const r = await checkWhopLicense('lic_valid', { WHOP_COMPANY_API: 'k' });
+  assert.deepEqual(r, { ok: true, membershipId: 'mem_abc', whopUserId: 'user_1', email: 'a@b.com' });
+});
+
+test('a 404 from Whop -> 402 "not found", not a raw pass-through', async () => {
+  globalThis.fetch = mockFetch(404, { error: { message: 'No such Membership found' } });
+  const r = await checkWhopLicense('lic_bad', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 402);
+});
+
+test('a cancelled membership is rejected even though Whop found it', async () => {
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'canceled', user: { id: 'u' } });
+  const r = await checkWhopLicense('lic_cancelled', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 402);
+});
+
+test('missing license_key is rejected before any network call', async () => {
+  let called = false;
+  globalThis.fetch = async () => { called = true; return new Response('{}', { status: 200 }); };
+  const r = await checkWhopLicense('', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+  assert.equal(called, false);
+});
+
+test('missing WHOP_COMPANY_API fails closed with 503, never treated as "valid"', async () => {
+  const r = await checkWhopLicense('lic_x', {});
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 503);
+});
+
+test('a network failure fails CLOSED — unreachable Whop must not grant access', async () => {
+  globalThis.fetch = async () => { throw new Error('network down'); };
+  const r = await checkWhopLicense('lic_x', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 502);
+});
+
+test('a malformed 200 (no user.id) is rejected rather than trusted', async () => {
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'active', user: {} });
+  const r = await checkWhopLicense('lic_x', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 502);
+});
+
+test('the license key is URL-encoded into the request path', async () => {
+  let capturedUrl;
+  globalThis.fetch = async (url) => {
+    capturedUrl = url;
+    return new Response(JSON.stringify({ id: 'm', status: 'active', user: { id: 'u' } }), { status: 200 });
+  };
+  await checkWhopLicense('lic/with spaces', { WHOP_COMPANY_API: 'k' });
+  assert.ok(!capturedUrl.includes('lic/with spaces'));
+  assert.ok(capturedUrl.includes(encodeURIComponent('lic/with spaces')));
+});
+
+// ── validateDevice ────────────────────────────────────────────────────────────
+
+import { validateDevice } from './_whop.js';
+
+test('201 from Whop means the device is valid (first use or matching)', async () => {
+  globalThis.fetch = mockFetch(201, {});
+  const r = await validateDevice('mem_x', 'hash123', { WHOP_COMPANY_API: 'k' });
+  assert.deepEqual(r, { ok: true });
+});
+
+test('400 means the licence is bound to a DIFFERENT device', async () => {
+  globalThis.fetch = mockFetch(400, {});
+  const r = await validateDevice('mem_x', 'hash123', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 409);
+});
+
+test('401 (missing member:manage) fails closed with 502, never treated as valid', async () => {
+  globalThis.fetch = mockFetch(401, {});
+  const r = await validateDevice('mem_x', 'hash123', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 502);
+});
+
+test('missing device_hash is rejected before any network call', async () => {
+  let called = false;
+  globalThis.fetch = async () => { called = true; return new Response('{}', { status: 201 }); };
+  const r = await validateDevice('mem_x', '', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(called, false);
+});
+
+test('missing WHOP_COMPANY_API fails closed with 503', async () => {
+  const r = await validateDevice('mem_x', 'hash', {});
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 503);
+});
+
+test('sends the metadata as {device_hash}, not the raw value under a different key', async () => {
+  let capturedBody;
+  globalThis.fetch = async (url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return new Response('{}', { status: 201 });
+  };
+  await validateDevice('mem_x', 'the-hash', { WHOP_COMPANY_API: 'k' });
+  assert.deepEqual(capturedBody, { metadata: { device_hash: 'the-hash' } });
+});
+
+test('a network failure fails closed', async () => {
+  globalThis.fetch = async () => { throw new Error('down'); };
+  const r = await validateDevice('mem_x', 'hash', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 502);
+});

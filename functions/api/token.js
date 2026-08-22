@@ -1,4 +1,5 @@
 import { mediaSlug, requireUserAuth, sha256Hex } from './_auth.js';
+import { checkWhopLicense, validateDevice } from './_whop.js';
 import { encryptToken } from './_crypto.js';
 import { requireRateLimit, clientKey } from './_ratelimit.js';
 
@@ -51,7 +52,8 @@ export async function onRequest(context) {
   const limited = await requireRateLimit(env, 'TOKEN_LIMITER', clientKey(request, 'token'), CORS);
   if (limited) return limited;
 
-  // Shared-secret auth — desktop app must send x-api-secret
+  // Shared-secret auth — desktop app must send x-api-secret. This authenticates THE APP
+  // (any copy of our binary), not the customer — see the license_key check below for that.
   if (request.headers.get('x-api-secret') !== env.API_SECRET) {
     return json({ ok: false, error: 'Unauthorized' }, 401);
   }
@@ -61,6 +63,36 @@ export async function onRequest(context) {
     body = await request.json();
   } catch {
     return json({ ok: false, error: 'Invalid JSON' }, 400);
+  }
+
+  // Whop entitlement check — the actual per-CUSTOMER gate. API_SECRET is shared across
+  // every installed copy of the app; a licence key is not. Checked BEFORE touching the
+  // OAuth `code`, which is single-use — validating license AFTER an OAuth exchange would
+  // burn the creator's one-time code for nothing if their membership turns out lapsed,
+  // forcing them to redo the entire Instagram permission grant just to be told no.
+  //
+  // Deliberately NOT device-locked (Whop's validate_license endpoint would do that) —
+  // founder's call 2026-08-22: handle key-sharing via ToS + manual disable/refund until
+  // it's an observed problem, not a technical lock from day one with no paying customers.
+  const { license_key, device_hash } = body;
+  const licenseCheck = await checkWhopLicense(license_key, env);
+  if (!licenseCheck.ok) {
+    return json({ ok: false, error: licenseCheck.error }, licenseCheck.status);
+  }
+
+  // Device lock — one active machine per licence. `device_hash` is computed and hashed
+  // ON THE DESKTOP from a stable local machine identifier; this endpoint never sees or
+  // stores the raw hardware value, only the hash Whop compares for equality.
+  //
+  // Required, not optional: an app build old enough to omit device_hash would otherwise
+  // silently skip the lock entirely, and "some installs are locked, some aren't" is a
+  // worse state than "everyone must upgrade to connect."
+  if (!device_hash || typeof device_hash !== 'string') {
+    return json({ ok: false, error: 'device_hash is required' }, 400);
+  }
+  const deviceCheck = await validateDevice(licenseCheck.membershipId, device_hash, env);
+  if (!deviceCheck.ok) {
+    return json({ ok: false, error: deviceCheck.error }, deviceCheck.status);
   }
 
   // Two accepted shapes:
@@ -148,9 +180,13 @@ export async function onRequest(context) {
   try {
     await env.DB.prepare(
       `INSERT OR REPLACE INTO ig_tokens
-         (ig_user_id, access_token, token_expiry, updated_at, desktop_token, desktop_token_created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(ig_user_id, access_token_enc, token_expiry, updated_at, desktop_token_hash, desktop_token_created_at).run();
+         (ig_user_id, access_token, token_expiry, updated_at, desktop_token, desktop_token_created_at,
+          whop_license_key, whop_membership_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      ig_user_id, access_token_enc, token_expiry, updated_at, desktop_token_hash, desktop_token_created_at,
+      license_key, licenseCheck.membershipId,
+    ).run();
   } catch (err) {
     console.error('D1 upsert error (ig_tokens):', { message: err?.message });
     return json({ ok: false, error: 'Could not store token' }, 500);

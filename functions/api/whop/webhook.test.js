@@ -183,3 +183,46 @@ test('key rotation: multiple space-separated v1 signatures, any match accepted',
   const res = await onRequest({ request: req(body, { id, ts, sig: `${decoy} ${real}` }), env });
   assert.equal(res.status, 200);
 });
+
+// ── Revoke on deactivate ─────────────────────────────────────────────────────
+
+test('membership.deactivated revokes the linked desktop_token', async () => {
+  const env = makeEnv();
+  const updates = [];
+  const originalPrepare = env.DB.prepare;
+  env.DB.prepare = (sql) => {
+    if (sql.includes('UPDATE ig_tokens')) {
+      return { bind: (...args) => ({ async run() { updates.push(args); return { meta: { changes: 1 } }; } }) };
+    }
+    return originalPrepare(sql);
+  };
+  const body = membershipPayload('membership.deactivated');
+  const res = await onRequest({ request: req(body), env });
+  assert.equal(res.status, 200);
+  assert.deepEqual(updates[0], ['mem_123']);
+});
+
+test('membership.activated does NOT touch ig_tokens', async () => {
+  const env = makeEnv();
+  const updates = [];
+  const originalPrepare = env.DB.prepare;
+  env.DB.prepare = (sql) => {
+    if (sql.includes('UPDATE ig_tokens')) updates.push(sql);
+    return originalPrepare(sql);
+  };
+  await onRequest({ request: req(membershipPayload('membership.activated')), env });
+  assert.equal(updates.length, 0);
+});
+
+test('a revoke failure does not turn a successful upsert into a 500', async () => {
+  const env = makeEnv();
+  const originalPrepare = env.DB.prepare;
+  env.DB.prepare = (sql) => {
+    if (sql.includes('UPDATE ig_tokens')) {
+      return { bind: () => ({ async run() { throw new Error('D1 down for the revoke'); } }) };
+    }
+    return originalPrepare(sql);
+  };
+  const res = await onRequest({ request: req(membershipPayload('membership.deactivated')), env });
+  assert.equal(res.status, 200, 'the membership write succeeded — Whop must not retry it');
+});

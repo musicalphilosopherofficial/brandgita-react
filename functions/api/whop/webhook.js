@@ -181,5 +181,29 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Storage failed' }, 500);
   }
 
+  // Revoke desktop access the moment a membership deactivates — real-time, not on the
+  // creator's next connect attempt. Without this, /api/token's Whop check (functions/
+  // api/_whop.js) only runs at CONNECT time, so a cancelled customer keeps a fully
+  // working desktop_token indefinitely: recording the cancellation here without acting
+  // on it would make this table a historical log, not an access control.
+  //
+  // Best-effort deliberately: a failure here must not turn a successful membership-state
+  // write into a 500 that makes Whop retry the whole webhook, re-running the upsert above
+  // for no reason. Logged loudly instead — an un-revoked token is a real problem, but not
+  // one Whop retrying the same event will fix.
+  if (status === 'inactive') {
+    try {
+      const result = await env.DB.prepare(
+        `UPDATE ig_tokens SET desktop_token = NULL, desktop_token_created_at = NULL
+         WHERE whop_membership_id = ?`
+      ).bind(membershipId).run();
+      if (result?.meta?.changes) {
+        console.log('Revoked desktop_token for deactivated Whop membership', { membershipId, changes: result.meta.changes });
+      }
+    } catch (err) {
+      console.error('Failed to revoke desktop_token on membership deactivation:', { membershipId, message: err?.message });
+    }
+  }
+
   return json({ ok: true });
 }
