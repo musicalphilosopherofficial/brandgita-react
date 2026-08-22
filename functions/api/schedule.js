@@ -1,4 +1,5 @@
 import { requireUserAuth } from './_auth.js';
+import { DEFAULT_PLATFORM, contractFor } from '../../shared/platform-contracts.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -37,30 +38,39 @@ export async function onRequest(context) {
     // ig_user_id comes from the bearer token — not from the body (never trust caller-supplied user id)
     const { id, type, asset_keys, cover_key, caption, post_at } = body;
 
+    // platform is OPTIONAL and defaults to 'ig'. Every desktop client shipped to date
+    // omits it and must keep behaving identically — this endpoint is live with a paying
+    // customer, and the desktop ships on its own release cadence, so requiring a field
+    // older builds cannot send would break them the moment this deploys.
+    const platform = body.platform ?? DEFAULT_PLATFORM;
+    let contract;
+    try {
+      contract = contractFor(platform);
+    } catch (err) {
+      // An unknown platform is a 400 naming what IS supported — never a 500, and never a
+      // silent fallback to Instagram, which would publish to the wrong network entirely.
+      return json({ ok: false, error: err.message }, 400);
+    }
+
     if (!id || !type || !Array.isArray(asset_keys) || asset_keys.length === 0 || !caption || !post_at) {
       return json(
         { ok: false, error: 'id, type, asset_keys (non-empty), caption and post_at are required' },
         400
       );
     }
-
-    if (!['reel', 'carousel'].includes(type)) {
-      return json({ ok: false, error: "type must be 'reel' or 'carousel'" }, 400);
+    if (typeof caption !== 'string') {
+      return json({ ok: false, error: 'caption must be a string' }, 400);
     }
 
-    // Caption length — Instagram's own cap is 2200 chars. Bounds the DB write and
-    // the cron's API call.
-    if (typeof caption !== 'string' || caption.length > 2200) {
-      return json({ ok: false, error: 'caption must be a string up to 2200 characters' }, 400);
-    }
-
-    // Asset count — reel is exactly 1 video; carousel is 2–10 items. Without a cap,
-    // one post could spawn hundreds of IG container calls and starve the cron.
-    if (type === 'reel' && asset_keys.length !== 1) {
-      return json({ ok: false, error: 'a reel must have exactly 1 asset' }, 400);
-    }
-    if (type === 'carousel' && (asset_keys.length < 2 || asset_keys.length > 10)) {
-      return json({ ok: false, error: 'a carousel must have 2–10 assets' }, 400);
+    // Content-shape rules live in the platform contract, not here: the valid types, the
+    // asset counts, and the caption cap are all facts about Instagram specifically
+    // (2200 chars is Meta's limit; YouTube's is 5000). Keeping them in this generic
+    // handler is what would make it silently wrong for platform two.
+    const problems = contract.validateCreate({ type, asset_keys, caption });
+    if (problems.length) {
+      // Every problem at once — a creator fixing one field per request is a worse
+      // experience than being told all of it up front.
+      return json({ ok: false, error: problems.join('; ') }, 400);
     }
 
     // Every asset_key (and cover_key) must live under THIS user's prefix — the cron
@@ -92,12 +102,13 @@ export async function onRequest(context) {
     try {
       await env.DB.prepare(
         `INSERT INTO scheduled_posts
-           (id, ig_user_id, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?)`
+           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?)`
       )
         .bind(
           id,
           ig_user_id,
+          platform,
           type,
           JSON.stringify(asset_keys),
           cover_key ?? null,
@@ -125,7 +136,7 @@ export async function onRequest(context) {
     let rows;
     try {
       const result = await env.DB.prepare(
-        `SELECT id, type, post_at, status, permalink, error, caption
+        `SELECT id, platform, type, post_at, status, permalink, error, caption
          FROM scheduled_posts
          WHERE ig_user_id = ?
          ORDER BY post_at ASC`
