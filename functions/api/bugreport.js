@@ -14,9 +14,8 @@
  *
  * Two reasons, both load-bearing:
  *   1. A burst would otherwise fan out synchronously into third-party quota. Notion's
- *      API is ~3 req/s, and exhausting it also breaks tools/notion_sync.py — our own
- *      BDD ticket sync. An attacker would DoS our development process, not just this
- *      endpoint.
+ *      API is ~3 req/s, so an inline call hands a stranger synchronous control over
+ *      our quota and our bill.
  *   2. The Notion and GitHub tokens must never be reachable from a request path the
  *      public can drive at will.
  *

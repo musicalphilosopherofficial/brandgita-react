@@ -3,9 +3,8 @@
 // Layer: TDD unit. Queue mechanics — claim, fan out, retry, give up.
 //
 // The drain exists so POST /api/bugreport never calls Notion or GitHub inline. A burst
-// would otherwise hit Notion's ~3 req/s directly, and exhausting that also breaks
-// tools/notion_sync.py — our own BDD ticket sync. An attacker would DoS our development
-// process, not just the endpoint.
+// would otherwise hit Notion's ~3 req/s directly, handing a stranger synchronous
+// control over our third-party quota and bill.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

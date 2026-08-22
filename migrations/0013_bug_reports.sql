@@ -2,10 +2,9 @@
 --
 -- This table is a QUEUE, not a log. POST /api/bugreport writes a pending row and
 -- returns; a cron worker drains it into Notion and GitHub. The indirection is
--- deliberate: fanning out inline would let a burst hit Notion's ~3 req/s quota, which
--- also breaks tools/notion_sync.py (our own BDD ticket sync) — an attacker would DoS
--- our development process, not just this endpoint. It also keeps the Notion and GitHub
--- tokens off any request path the public can drive.
+-- deliberate: fanning out inline would let a burst hit Notion's ~3 req/s quota, handing
+-- a stranger synchronous control over our third-party quota and bill. It also keeps the
+-- Notion and GitHub tokens off any request path the public can drive.
 --
 -- Keyed on membership_id, not ig_user_id, on purpose: the most valuable report is
 -- "the app broke during onboarding", and that creator has no connected Instagram

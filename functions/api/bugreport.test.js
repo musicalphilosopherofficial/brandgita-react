@@ -75,9 +75,8 @@ test('a valid report is accepted and returns an opaque id', async () => {
 });
 
 test('the report is persisted for the cron drain, not fanned out inline', async () => {
-  // Synchronous fan-out to Notion/GitHub means a burst hits third-party quota
-  // directly — and exhausting Notion also breaks tools/notion_sync.py, our own BDD
-  // ticket sync. Write to D1, let the cron worker drain it.
+  // Synchronous fan-out means a burst hits third-party quota directly, handing a
+  // stranger control over our bill. Write to D1, let the cron worker drain it.
   let inserted = null;
   const db = fakeDB({ onInsert: (args) => { inserted = args; } });
   const res = await onRequest(ctx(GOOD, { db }));
