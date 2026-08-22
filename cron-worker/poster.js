@@ -23,6 +23,7 @@
 //     fail immediately with error 'TOKEN_EXPIRED' so the desktop app can prompt
 //     a reconnect.
 
+import { drainBugReports } from './bugdrain.js';
 import { adapterFor, ADAPTERS } from './platforms/index.js';
 import { DEFAULT_PLATFORM, contractFor } from '../shared/platform-contracts.js';
 import { MEDIA_BASE } from './util.js';
@@ -274,6 +275,19 @@ export { processPost, handleRetryableFailure, claimPost, runDue };
 export default {
   async scheduled(event, env, ctx) {
     await runDue(env, {});
+
+    // Drain queued bug reports into GitHub/Notion. Isolated in its own try/catch for
+    // the same reason as the per-platform sweeps below: a tracker outage must not stop
+    // scheduled posts from going out. Publishing is the creator's livelihood; filing a
+    // ticket can wait for the next tick.
+    try {
+      const r = await drainBugReports(env);
+      if (r && (r.synced || r.failed)) {
+        console.log('bugdrain', JSON.stringify(r));
+      }
+    } catch (err) {
+      console.error('bugdrain: unhandled', { message: err?.message });
+    }
 
     // Refresh credentials for every registered platform that defines a sweep.
     // Each platform's refresh is individually try/caught so one platform's
