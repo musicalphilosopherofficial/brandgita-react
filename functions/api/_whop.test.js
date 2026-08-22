@@ -12,7 +12,7 @@ test('an active membership is accepted and its identity extracted', async () => 
     id: 'mem_abc', status: 'active', valid: true, user: 'user_1', email: 'a@b.com',
   });
   const r = await checkWhopLicense('lic_valid', { WHOP_COMPANY_API: 'k' });
-  assert.deepEqual(r, { ok: true, membershipId: 'mem_abc', whopUserId: 'user_1', email: 'a@b.com' });
+  assert.deepEqual(r, { ok: true, membershipId: 'mem_abc', whopUserId: 'user_1', email: 'a@b.com', metadata: {}, status: 'active' });
 });
 
 test('a 404 from Whop -> 402 "not found", not a raw pass-through', async () => {
@@ -145,42 +145,95 @@ test('a network failure fails closed', async () => {
 
 import { resetDeviceLock } from './_whop.js';
 
-test('a successful reset returns ok', async () => {
-  globalThis.fetch = mockFetch(200, { id: 'mem_x', metadata: {} });
-  const r = await resetDeviceLock('mem_x', { WHOP_COMPANY_API: 'k' });
-  assert.deepEqual(r, { ok: true });
-});
-
-test('sends PATCH with empty metadata, not POST validate_license', async () => {
-  let capturedMethod, capturedBody, capturedUrl;
-  globalThis.fetch = async (url, opts) => {
-    capturedUrl = url;
-    capturedMethod = opts.method;
-    capturedBody = JSON.parse(opts.body);
-    return new Response('{}', { status: 200 });
+function membershipResponse(overrides = {}) {
+  return {
+    id: 'mem_x', status: 'active', valid: true, user: 'u', email: 'e@x.com',
+    metadata: {}, ...overrides,
   };
-  await resetDeviceLock('mem_x', { WHOP_COMPANY_API: 'k' });
-  assert.equal(capturedMethod, 'PATCH');
-  assert.deepEqual(capturedBody, { metadata: {} });
-  assert.ok(!String(capturedUrl).includes('validate_license'));
+}
+
+test('a first-ever reset (no last_reset_at) succeeds and stamps the time', async () => {
+  let patchBody;
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'PATCH') {
+      patchBody = JSON.parse(opts.body);
+      return new Response('{}', { status: 200 });
+    }
+    return new Response(JSON.stringify(membershipResponse({ metadata: { hwid: 'old-device' } })), { status: 200 });
+  };
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  assert.deepEqual(r, { ok: true });
+  assert.ok(!('hwid' in patchBody.metadata), 'hwid must be cleared');
+  assert.ok(patchBody.metadata.last_reset_at, 'must stamp a new reset time');
 });
 
-test('a non-OK response fails, not silently treated as reset', async () => {
-  globalThis.fetch = mockFetch(404, {});
-  const r = await resetDeviceLock('mem_doesnotexist', { WHOP_COMPANY_API: 'k' });
+test('a reset inside the 30-day cooldown is rejected with 429, and touches nothing', async () => {
+  const recentReset = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days ago
+  let patchCalled = false;
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'PATCH') { patchCalled = true; return new Response('{}', { status: 200 }); }
+    return new Response(JSON.stringify(membershipResponse({ metadata: { last_reset_at: recentReset } })), { status: 200 });
+  };
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
-  assert.equal(r.status, 502);
+  assert.equal(r.status, 429);
+  assert.match(r.error, /\d+ day/);
+  assert.equal(patchCalled, false, 'must not touch Whop once the cooldown rejects it');
 });
 
-test('missing WHOP_COMPANY_API fails closed', async () => {
-  const r = await resetDeviceLock('mem_x', {});
+test('a reset PAST the 30-day cooldown succeeds', async () => {
+  const oldReset = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(); // 31 days ago
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'PATCH') return new Response('{}', { status: 200 });
+    return new Response(JSON.stringify(membershipResponse({ metadata: { hwid: 'x', last_reset_at: oldReset } })), { status: 200 });
+  };
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, true);
+});
+
+test('a DEAD subscription cannot consume a reset — rejected before any PATCH', async () => {
+  let patchCalled = false;
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'PATCH') { patchCalled = true; return new Response('{}', { status: 200 }); }
+    return new Response(JSON.stringify(membershipResponse({ valid: false, status: 'canceled' })), { status: 200 });
+  };
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 402);
+  assert.match(r.error, /canceled/);
+  assert.equal(patchCalled, false);
+});
+
+test('other metadata keys survive a reset untouched', async () => {
+  let patchBody;
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'PATCH') { patchBody = JSON.parse(opts.body); return new Response('{}', { status: 200 }); }
+    return new Response(JSON.stringify(membershipResponse({ metadata: { hwid: 'old', some_other_key: 'keep-me' } })), { status: 200 });
+  };
+  await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
+  assert.equal(patchBody.metadata.some_other_key, 'keep-me');
+  assert.ok(!('hwid' in patchBody.metadata));
+});
+
+test('a not-found license fails the same way checkWhopLicense already does', async () => {
+  globalThis.fetch = async () => new Response('{}', { status: 404 });
+  const r = await resetDeviceLock('lic_bad', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 402);
+});
+
+test('missing WHOP_COMPANY_API fails closed at the entitlement check', async () => {
+  const r = await resetDeviceLock('lic_x', {});
   assert.equal(r.ok, false);
   assert.equal(r.status, 503);
 });
 
-test('a network failure fails closed', async () => {
-  globalThis.fetch = async () => { throw new Error('down'); };
-  const r = await resetDeviceLock('mem_x', { WHOP_COMPANY_API: 'k' });
+test('a PATCH failure after a successful entitlement+cooldown check is reported, not silently ok', async () => {
+  globalThis.fetch = async (url, opts) => {
+    if (opts?.method === 'PATCH') return new Response('{}', { status: 500 });
+    return new Response(JSON.stringify(membershipResponse()), { status: 200 });
+  };
+  const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 502);
 });
