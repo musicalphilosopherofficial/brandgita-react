@@ -86,7 +86,7 @@
   <ul>
     <li><strong>Name and email address</strong> — used to create and manage your account</li>
     <li><strong>Username</strong> — used to identify your account within the Services</li>
-    <li><strong>OAuth access tokens (Instagram, YouTube)</strong> — stored locally on your device only, inside your operating system's secure credential store; used solely to authenticate publishing actions on your behalf</li>
+    <li><strong>OAuth access tokens</strong> — your <strong>YouTube</strong> token is stored locally on your device only, inside your operating system's secure credential store. Your <strong>Instagram</strong> token is stored encrypted on Brand Gita's servers (Cloudflare D1), because scheduled posts must be published at the time you chose even when your computer is asleep or offline. Both are used solely to authenticate publishing actions on your behalf, and neither is shared with any third party.</li>
     <li><strong>Support communications</strong> — descriptions of issues, screen recordings, or video excerpts you voluntarily submit when seeking assistance</li>
   </ul>
 
@@ -269,7 +269,7 @@
     <thead><tr><th>Data type</th><th>Retention period</th></tr></thead>
     <tbody>
       <tr><td>Account data (name, email, username)</td><td>Duration of account + 3 months after termination</td></tr>
-      <tr><td>OAuth tokens</td><td>Stored locally on your device only; deleted when you disconnect or uninstall</td></tr>
+      <tr><td>OAuth tokens</td><td>YouTube: on your device only. Instagram: encrypted on Brand Gita's servers so scheduled posts can publish while your computer is off. Both deleted when you disconnect or uninstall.</td></tr>
       <tr><td>Video content — YouTube</td><td>Sent directly to Google's API; never stored on Brand Gita servers</td></tr>
       <tr><td>Video content — Instagram (scheduled)</td><td>Temporarily stored on Cloudflare R2 until Meta retrieves it at publish time; deleted immediately after successful publish or on failure, and automatically deleted within 75 days in all cases</td></tr>
       <tr><td>Instagram scheduling metadata</td><td>Stored on Brand Gita servers until the scheduled publish time; deleted after publish</td></tr>
