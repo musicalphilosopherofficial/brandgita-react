@@ -37,6 +37,13 @@ const ALLOWED_PROPS = {
   published: new Set(['platform', 'content_type']),
   publish_failed: new Set(['platform', 'content_type']),
   feature_used: new Set(['feature']),
+  // Hardware profile — absorbed from the retired FastAPI /v1/hardware endpoint
+  // (2026-08-22) so there is one telemetry pipeline rather than a separate server whose
+  // only justification was keeping an Airtable key out of the desktop binary. Every
+  // value is BUCKETED client-side ("Apple Silicon M3", "32GB") and re-coerced to a short
+  // safe scalar here; `encoders` arrives as a joined string ("videotoolbox+qsv") because
+  // this allowlist drops arrays.
+  hardware_profile: new Set(['cpu_family', 'gpu_family', 'ram_band', 'encoders', 'encode_bucket']),
 };
 
 const MAX_PROPS_BYTES = 256;
