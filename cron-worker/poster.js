@@ -32,6 +32,15 @@ const MEDIA_BASE = 'https://brandgita.com/api/media';
 const POLL_INTERVAL_MS = 10_000; // 10 seconds
 const POLL_MAX_MS = 5 * 60_000;  // 5 minutes
 
+// mediaBase/sleepFn/pollIntervalMs/pollMaxMs are parameters (default = today's
+// real values) purely so characterization tests (cron-worker/poster.test.js)
+// can inject a fake media host, a zero-delay sleep, and a short poll deadline.
+// The deadline must be injectable separately from sleepFn: the poll loop's
+// `while (Date.now() < deadline)` check is real wall-clock time regardless of
+// whether sleepFn is instant, so a timeout test with only sleepFn faked would
+// still burn 5 real minutes spinning on Date.now(). Production callers never
+// pass any of these — default parameters preserve today's behaviour exactly.
+
 // retry_count at which the *current* attempt is the final (5th) one.
 const MAX_RETRY_BEFORE_PERMANENT_FAIL = 4;
 
@@ -43,14 +52,14 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function mediaUrl(key) {
+function mediaUrl(key, mediaBase = MEDIA_BASE) {
   // key may contain slashes (e.g. "user123/clip.mp4"); encode each segment so
   // the path stays valid while preserving the directory structure.
   const encoded = String(key)
     .split('/')
     .map((seg) => encodeURIComponent(seg))
     .join('/');
-  return `${MEDIA_BASE}/${encoded}`;
+  return `${mediaBase}/${encoded}`;
 }
 
 function sleep(ms) {
@@ -180,8 +189,11 @@ async function handleRetryableFailure(env, post, errorText) {
 // ---------------------------------------------------------------------------
 
 // Poll a media container until it reaches FINISHED, or throw on ERROR/timeout.
-async function waitForContainerReady(igUserId, creationId, accessToken) {
-  const deadline = Date.now() + POLL_MAX_MS;
+async function waitForContainerReady(
+  igUserId, creationId, accessToken,
+  sleepFn = sleep, pollIntervalMs = POLL_INTERVAL_MS, pollMaxMs = POLL_MAX_MS
+) {
+  const deadline = Date.now() + pollMaxMs;
 
   while (Date.now() < deadline) {
     const statusData = await igGet(creationId, 'status_code', accessToken);
@@ -192,10 +204,10 @@ async function waitForContainerReady(igUserId, creationId, accessToken) {
       throw new IgApiError(`Container ${creationId} processing returned status ${code}`);
     }
     // IN_PROGRESS / PUBLISHED-not-yet — keep polling.
-    await sleep(POLL_INTERVAL_MS);
+    await sleepFn(pollIntervalMs);
   }
 
-  throw new IgApiError(`Container ${creationId} did not finish within ${POLL_MAX_MS / 1000}s`);
+  throw new IgApiError(`Container ${creationId} did not finish within ${pollMaxMs / 1000}s`);
 }
 
 // Publish a finished container and return its permalink.
@@ -211,7 +223,10 @@ async function publishAndGetPermalink(igUserId, creationId, accessToken) {
 }
 
 // REEL: create container -> poll -> publish -> permalink.
-async function postReel(post, assetKeys, accessToken) {
+async function postReel(
+  post, assetKeys, accessToken,
+  mediaBase = MEDIA_BASE, sleepFn = sleep, pollIntervalMs = POLL_INTERVAL_MS, pollMaxMs = POLL_MAX_MS
+) {
   const igUserId = post.ig_user_id;
 
   if (!assetKeys.length) {
@@ -220,12 +235,12 @@ async function postReel(post, assetKeys, accessToken) {
 
   const params = {
     media_type: 'REELS',
-    video_url: mediaUrl(assetKeys[0]),
+    video_url: mediaUrl(assetKeys[0], mediaBase),
     caption: post.caption || '',
   };
   // cover_url is optional — only include when a cover_key exists.
   if (post.cover_key) {
-    params.cover_url = mediaUrl(post.cover_key);
+    params.cover_url = mediaUrl(post.cover_key, mediaBase);
   }
 
   const createRes = await igPost(`${igUserId}/media`, params, accessToken);
@@ -235,14 +250,14 @@ async function postReel(post, assetKeys, accessToken) {
   }
 
   // Reels are transcoded asynchronously; wait for FINISHED before publishing.
-  await waitForContainerReady(igUserId, creationId, accessToken);
+  await waitForContainerReady(igUserId, creationId, accessToken, sleepFn, pollIntervalMs, pollMaxMs);
 
   return publishAndGetPermalink(igUserId, creationId, accessToken);
 }
 
 // CAROUSEL: create one child container per image -> create carousel container
 // -> publish -> permalink.
-async function postCarousel(post, assetKeys, accessToken) {
+async function postCarousel(post, assetKeys, accessToken, mediaBase = MEDIA_BASE) {
   const igUserId = post.ig_user_id;
 
   if (assetKeys.length < 2) {
@@ -254,7 +269,7 @@ async function postCarousel(post, assetKeys, accessToken) {
   for (const key of assetKeys) {
     const childRes = await igPost(
       `${igUserId}/media`,
-      { image_url: mediaUrl(key), is_carousel_item: 'true' },
+      { image_url: mediaUrl(key, mediaBase), is_carousel_item: 'true' },
       accessToken
     );
     if (!childRes.id) {
@@ -288,7 +303,10 @@ async function postCarousel(post, assetKeys, accessToken) {
 // Per-post orchestration
 // ---------------------------------------------------------------------------
 
-async function processPost(env, post) {
+async function processPost(
+  env, post,
+  mediaBase = MEDIA_BASE, sleepFn = sleep, pollIntervalMs = POLL_INTERVAL_MS, pollMaxMs = POLL_MAX_MS
+) {
   // Atomically claim the post. If another overlapping run already claimed it,
   // bail out immediately — do NOT publish (prevents double-posting to Instagram).
   const won = await claimPost(env, post.id);
@@ -328,9 +346,9 @@ async function processPost(env, post) {
   try {
     let permalink;
     if (post.type === 'reel') {
-      permalink = await postReel(post, assetKeys, accessToken);
+      permalink = await postReel(post, assetKeys, accessToken, mediaBase, sleepFn, pollIntervalMs, pollMaxMs);
     } else if (post.type === 'carousel') {
-      permalink = await postCarousel(post, assetKeys, accessToken);
+      permalink = await postCarousel(post, assetKeys, accessToken, mediaBase);
     } else {
       // Unknown type — not retryable.
       await markFailed(env, post.id, `Unknown post type: ${post.type}`);
@@ -404,46 +422,77 @@ async function refreshExpiringTokens(env) {
 }
 
 // ---------------------------------------------------------------------------
+// Due-post batch — find due posts, process each in isolation.
+//
+// Extracted out of the cron entrypoint (was inline in `scheduled()`) so it can
+// be tested directly, and so a future per-platform loop (each platform's own
+// due-query + processor) can wrap this without duplicating the query/loop
+// logic. `deps` carries the same test-only injection points as processPost —
+// production's only caller (`scheduled()` below) always passes `{}`, so every
+// default here is today's real behaviour.
+// ---------------------------------------------------------------------------
+async function runDue(env, deps = {}) {
+  const {
+    mediaBase = MEDIA_BASE,
+    sleepFn = sleep,
+    pollIntervalMs = POLL_INTERVAL_MS,
+    pollMaxMs = POLL_MAX_MS,
+  } = deps;
+
+  // Find up to 10 due, still-scheduled posts under the retry cap.
+  let duePosts = [];
+  try {
+    const result = await env.DB.prepare(
+      `SELECT * FROM scheduled_posts
+       WHERE post_at <= datetime('now')
+         AND status = 'scheduled'
+         AND retry_count < 5
+       LIMIT 10`
+    ).all();
+    duePosts = result.results || [];
+  } catch (err) {
+    console.error('Poster: failed to query due posts:', err);
+    // Swallow it here (duePosts stays []) rather than rethrow — the caller
+    // (scheduled()) runs the token-refresh pass unconditionally right after
+    // this returns, and a broken due-query must not skip that.
+  }
+
+  // Process each post in isolation; one failure must not abort the run.
+  for (const post of duePosts) {
+    try {
+      await processPost(env, post, mediaBase, sleepFn, pollIntervalMs, pollMaxMs);
+    } catch (err) {
+      // Defensive catch — processPost handles its own errors, but if state
+      // transition writes themselves throw, capture it here so the loop
+      // continues with the next post.
+      console.error(`Poster: unhandled error processing post ${post.id}:`, err);
+      try {
+        await handleRetryableFailure(env, post, `Unhandled: ${err.message || err}`);
+      } catch (innerErr) {
+        console.error(`Poster: failed to record failure for post ${post.id}:`, innerErr);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Cron entrypoint
 // ---------------------------------------------------------------------------
 
+// Named exports below are ONLY for cron-worker/poster.test.js (characterization
+// tests written ahead of a planned restructure). The Worker runtime consumes
+// nothing but `default.scheduled` — Wrangler doesn't even look at named exports
+// on a scheduled handler — so these are inert in production.
+export { processPost, refreshExpiringTokens, handleRetryableFailure, claimPost, runDue };
+
 export default {
   async scheduled(event, env, ctx) {
-    // Step 1 — find up to 10 due, still-scheduled posts under the retry cap.
-    let duePosts = [];
-    try {
-      const result = await env.DB.prepare(
-        `SELECT * FROM scheduled_posts
-         WHERE post_at <= datetime('now')
-           AND status = 'scheduled'
-           AND retry_count < 5
-         LIMIT 10`
-      ).all();
-      duePosts = result.results || [];
-    } catch (err) {
-      console.error('Poster: failed to query due posts:', err);
-      // Still attempt the token-refresh pass below even if the query failed.
-    }
+    await runDue(env, {});
 
-    // Step 2/3 — process each post in isolation; one failure must not abort the run.
-    for (const post of duePosts) {
-      try {
-        await processPost(env, post);
-      } catch (err) {
-        // Defensive catch — processPost handles its own errors, but if state
-        // transition writes themselves throw, capture it here so the loop
-        // continues with the next post.
-        console.error(`Poster: unhandled error processing post ${post.id}:`, err);
-        try {
-          await handleRetryableFailure(env, post, `Unhandled: ${err.message || err}`);
-        } catch (innerErr) {
-          console.error(`Poster: failed to record failure for post ${post.id}:`, innerErr);
-        }
-      }
-    }
-
-    // Step 4 — refresh tokens nearing expiry. Runs every cron tick, wrapped so a
-    // failure here never affects publishing above.
+    // Refresh tokens nearing expiry. Runs every cron tick, wrapped so a
+    // failure here never affects publishing above, and unconditionally —
+    // even if runDue's due-posts query itself failed (see the comment inside
+    // runDue: it swallows that error rather than rethrow it here).
     try {
       await refreshExpiringTokens(env);
     } catch (err) {

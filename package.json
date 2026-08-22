@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test \"{functions,cron-worker,shared}/**/*.test.js\""
   },
   "dependencies": {
     "framer-motion": "^12.39.0",

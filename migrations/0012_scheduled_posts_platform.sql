@@ -1,0 +1,35 @@
+-- Apply with:
+--   npx wrangler d1 execute brandgita-waitlist --remote --file=./migrations/0012_scheduled_posts_platform.sql
+--
+-- Adds a `platform` column to scheduled_posts ahead of supporting a second
+-- distribution platform beyond Instagram. Three deliberate choices below:
+--
+-- 1. DEFAULT 'ig', no backfill UPDATE. SQLite implements "ADD COLUMN ... DEFAULT"
+--    as a metadata-only change — it does not rewrite existing rows, it just
+--    records the default for reads of rows that predate the column. That means
+--    every existing scheduled_posts row is retroactively 'ig' with zero table
+--    rewrite and zero lock contention, which matters because the cron worker
+--    reads this table every 60 seconds against a live table with real
+--    customer rows in it. A separate `UPDATE scheduled_posts SET platform =
+--    'ig'` would touch every row and briefly contend with the poller for no
+--    behavioural gain over the DEFAULT alone.
+--
+-- 2. NO CHECK constraint on platform, even though `type` has one two lines
+--    below in migration 0002. That CHECK(type IN ('reel','carousel')) is
+--    exactly what blocks adding a second post shape today — SQLite cannot
+--    ALTER a CHECK constraint, only recreate the table under it (12-step
+--    "rename, create, copy, drop, rename" dance) to add one more allowed
+--    value. Adding a second immutable CHECK to the column whose entire
+--    purpose is to make platforms extensible would bake in the same mistake
+--    a second time. Platform validity is enforced in code instead, in the
+--    adapter registry that maps a platform string to its publish
+--    implementation — new platforms are added there, not by an ALTER.
+--
+-- 3. NO INDEX on platform. The cron's hot path is the (post_at, status) index
+--    from migration 0002 (idx_scheduled_posts_post_at) — platform is not a
+--    predicate in that query, so an index here buys it nothing. Today every
+--    row has the same value ('ig'), so a platform-only index would be a
+--    single-distinct-value B-tree: one write cost per insert/update for a
+--    structure that can never narrow a scan. Add an index if and when a
+--    query actually filters on platform.
+ALTER TABLE scheduled_posts ADD COLUMN platform TEXT NOT NULL DEFAULT 'ig';
