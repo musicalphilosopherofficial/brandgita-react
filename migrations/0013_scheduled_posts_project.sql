@@ -1,0 +1,33 @@
+-- Apply with:
+--   npx wrangler d1 execute brandgita-waitlist --remote --file=./migrations/0013_scheduled_posts_project.sql
+--
+-- Adds `project_slug` to scheduled_posts, so a post can be traced back to the
+-- project that produced it.
+--
+-- WHY: the desktop sidebar organises work as project → platform → format
+-- (decisions/content-project-model.md). The platform level of that tree IS the
+-- set of posts for a project — but scheduled_posts records what was sent and
+-- where, never what it came from. Without this column the tree can only ever
+-- show the "Not posted yet" branch: a creator's published work is invisible in
+-- the very view meant to show it.
+--
+-- Three choices, in the spirit of 0012:
+--
+-- 1. NULLABLE, no default. Unlike `platform`, there is no correct retroactive
+--    value — a row written before this column existed genuinely does not know
+--    its project, and stamping every one with a made-up slug would be worse
+--    than an honest NULL. The client treats NULL as "not linked to a project"
+--    and groups those posts on their own, which is truthful about rows that
+--    predate the column and about posts made outside a project.
+--
+-- 2. NO FOREIGN KEY. Projects live on the creator's own machine, in
+--    ~/.bg/processing — the server has never seen them and cannot validate a
+--    slug against anything. A FK here would reference a table that does not
+--    exist and never will.
+--
+-- 3. NO INDEX. The only query that filters on this is the desktop client
+--    grouping a list it has ALREADY fetched for the whole user; the server
+--    never selects by project_slug. An index would cost a write per insert to
+--    serve a predicate nobody issues. Add one if a per-project endpoint is
+--    ever built.
+ALTER TABLE scheduled_posts ADD COLUMN project_slug TEXT;

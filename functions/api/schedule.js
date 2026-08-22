@@ -43,6 +43,23 @@ export async function onRequest(context) {
     // customer, and the desktop ships on its own release cadence, so requiring a field
     // older builds cannot send would break them the moment this deploys.
     const platform = body.platform ?? DEFAULT_PLATFORM;
+
+    // project_slug is OPTIONAL, for exactly the same reason platform is: every desktop
+    // build shipped so far omits it, and this endpoint is live with a paying customer.
+    // A missing slug means "not linked to a project", which is the truthful value both
+    // for older clients and for a post made outside one.
+    //
+    // Bounded and type-checked but NOT validated against anything — projects live in
+    // ~/.bg/processing on the creator's machine and the server has never seen them. The
+    // cap is here so a malformed client cannot write an unbounded string into a column
+    // the cron reads every 60 seconds.
+    let project_slug = body.project_slug ?? null;
+    if (project_slug !== null) {
+      if (typeof project_slug !== 'string') {
+        return json({ ok: false, error: 'project_slug must be a string' }, 400);
+      }
+      project_slug = project_slug.trim().slice(0, 200) || null;
+    }
     let contract;
     try {
       contract = contractFor(platform);
@@ -102,8 +119,8 @@ export async function onRequest(context) {
     try {
       await env.DB.prepare(
         `INSERT INTO scheduled_posts
-           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?)`
+           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at, project_slug)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?, ?)`
       )
         .bind(
           id,
@@ -114,7 +131,13 @@ export async function onRequest(context) {
           cover_key ?? null,
           caption,
           post_at,
-          now
+          now,
+          // Which local project this came from, so the desktop sidebar can file the post
+          // under it (decisions/content-project-model.md). Optional and never validated:
+          // projects live in ~/.bg/processing on the creator's machine and the server has
+          // no way to check a slug against anything. NULL means "not linked", which is the
+          // honest value for a post made outside a project.
+          project_slug
         )
         .run();
     } catch (err) {
@@ -136,7 +159,7 @@ export async function onRequest(context) {
     let rows;
     try {
       const result = await env.DB.prepare(
-        `SELECT id, platform, type, post_at, status, permalink, error, caption
+        `SELECT id, platform, type, post_at, status, permalink, error, caption, project_slug
          FROM scheduled_posts
          WHERE ig_user_id = ?
          ORDER BY post_at ASC`
