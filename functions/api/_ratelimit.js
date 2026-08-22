@@ -12,8 +12,11 @@
  * production. Only the live burst settled it.
  *
  * Actual rate limiting for Pages is a WAF Rate Limiting Rule in the dashboard (free plan:
- * one rule). This module stays because it is correct, costs nothing while inert, and
- * becomes live the moment the endpoint moves to a real Worker.
+ * one rule) — LIVE as of 2026-08-22: "token-bootstrap-bruteforce", matching POST
+ * /api/token, 10 requests/10s, block for 10s. Confirmed against production with the
+ * same unauthenticated-burst method: 10× 401 then 5× 429. This module stays because it
+ * is correct, costs nothing while inert, and becomes live the moment the endpoint moves
+ * to a real Worker.
  *
  * ⚠️ FAIL-OPEN, DELIBERATELY — and that is the only reason the above was not an outage.
  * If the binding is absent this returns null (no limit) rather than throwing:
