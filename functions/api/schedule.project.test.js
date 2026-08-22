@@ -164,3 +164,143 @@ test('GET on rows that predate the column returns null, not a crash', async () =
   const res = await onRequest(ctx(null, { db: fakeDB({ rows }), method: 'GET' }));
   assert.equal((await res.json()).posts[0].project_slug, null);
 });
+
+
+// ---------------------------------------------------------------------------
+// deploy ordering — the column may not exist yet
+// ---------------------------------------------------------------------------
+//
+// Pages deploys on git push; D1 migrations are run by hand. So there is a real window
+// where this code is live and `project_slug` does not exist yet — and an INSERT naming a
+// missing column fails outright, which would break ALL scheduling for a paying customer
+// until someone noticed and ran the migration.
+//
+// Ordering discipline ("always migrate first") is not a mitigation; it is a hope. The
+// handler falls back instead.
+
+function failingOnProjectSlug({ onInsert = () => {} } = {}) {
+  return {
+    prepare(sql) {
+      return {
+        bind: (...args) => ({
+          async first() {
+            if (sql.includes('FROM ig_tokens')) {
+              return { ig_user_id: USER, desktop_token_created_at: new Date().toISOString() };
+            }
+            return null;
+          },
+          async run() {
+            if (sql.includes('INSERT INTO scheduled_posts')) {
+              if (sql.includes('project_slug')) {
+                throw new Error('D1_ERROR: table scheduled_posts has no column named project_slug');
+              }
+              onInsert({ sql, args });
+            }
+            return {};
+          },
+          async all() { return { results: [] }; },
+        }),
+      };
+    },
+  };
+}
+
+test('scheduling still works when the column has not been migrated yet', async () => {
+  let captured;
+  const res = await onRequest(ctx(validBody({ project_slug: 'tuesday_reel' }),
+    { db: failingOnProjectSlug({ onInsert: (c) => { captured = c; } }) }));
+  assert.equal(res.status, 200, 'a pre-migration deploy broke scheduling outright');
+  assert.equal((await res.json()).ok, true);
+  assert.ok(captured, 'no fallback insert was attempted');
+  assert.ok(!captured.sql.includes('project_slug'), 'the retry still named the missing column');
+});
+
+test('a non-column error is NOT retried into a false success', async () => {
+  // The dangerous shape: the first insert fails for a real reason (a UNIQUE violation, a
+  // constraint, a transient fault) and the retry happens to succeed. Reporting ok:true
+  // then would claim a post was scheduled under terms the database rejected. Only the
+  // missing-column error may be retried.
+  let attempts = 0;
+  const db = {
+    prepare(sql) {
+      return {
+        bind: () => ({
+          async first() {
+            if (sql.includes('FROM ig_tokens')) {
+              return { ig_user_id: USER, desktop_token_created_at: new Date().toISOString() };
+            }
+            return null;
+          },
+          async run() {
+            if (!sql.includes('INSERT')) return {};
+            attempts += 1;
+            if (attempts === 1) throw new Error('UNIQUE constraint failed');
+            return {};                       // the retry would succeed, if one happened
+          },
+          async all() { return { results: [] }; },
+        }),
+      };
+    },
+  };
+  const res = await onRequest(ctx(validBody(), { db }));
+  assert.equal(attempts, 1, 'a UNIQUE violation was retried');
+  assert.equal(res.status, 409);
+});
+
+test('the fallback does not swallow a DIFFERENT insert failure', async () => {
+  // A UNIQUE violation or a dead database must still surface. Retrying blindly and
+  // reporting success would be worse than the bug it is guarding against.
+  const db = {
+    prepare(sql) {
+      return {
+        bind: () => ({
+          async first() {
+            if (sql.includes('FROM ig_tokens')) {
+              return { ig_user_id: USER, desktop_token_created_at: new Date().toISOString() };
+            }
+            return null;
+          },
+          async run() {
+            if (sql.includes('INSERT')) throw new Error('UNIQUE constraint failed');
+            return {};
+          },
+          async all() { return { results: [] }; },
+        }),
+      };
+    },
+  };
+  const res = await onRequest(ctx(validBody(), { db }));
+  assert.equal(res.status, 409);
+});
+
+test('GET survives the column being absent', async () => {
+  // The SELECT names project_slug too, and a listing that 500s hides every scheduled post
+  // a creator has — a worse outcome than not knowing which project they came from.
+  const db = {
+    prepare(sql) {
+      return {
+        bind: () => ({
+          async first() {
+            if (sql.includes('FROM ig_tokens')) {
+              return { ig_user_id: USER, desktop_token_created_at: new Date().toISOString() };
+            }
+            return null;
+          },
+          async run() { return {}; },
+          async all() {
+            if (sql.includes('project_slug')) {
+              throw new Error('D1_ERROR: no such column: project_slug');
+            }
+            return { results: [{ id: 'p1', platform: 'ig', type: 'reel', post_at: 'x',
+                                 status: 'scheduled', permalink: null, error: null, caption: 'c' }] };
+          },
+        }),
+      };
+    },
+  };
+  const res = await onRequest(ctx(null, { db, method: 'GET' }));
+  assert.equal(res.status, 200, 'the schedule listing broke before the migration ran');
+  const body = await res.json();
+  assert.equal(body.posts.length, 1);
+  assert.equal(body.posts[0].project_slug, undefined);
+});

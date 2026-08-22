@@ -30,4 +30,11 @@
 --    never selects by project_slug. An index would cost a write per insert to
 --    serve a predicate nobody issues. Add one if a per-project endpoint is
 --    ever built.
+-- SAFE TO RUN LATE. functions/api/schedule.js detects a missing project_slug and falls
+-- back to writing (and reading) without it, logging a warning that names this migration.
+-- Pages deploys on git push while migrations are run by hand, so the code WILL be live
+-- before this runs — and an INSERT naming a column that does not exist fails outright,
+-- which would have broken all scheduling for a paying customer until someone noticed.
+-- "Migrate first" is a hope; the fallback is the mitigation. Running this simply makes
+-- the warning stop and the sidebar's platform level start working.
 ALTER TABLE scheduled_posts ADD COLUMN project_slug TEXT;

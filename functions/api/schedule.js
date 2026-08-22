@@ -116,30 +116,49 @@ export async function onRequest(context) {
 
     const now = new Date().toISOString();
 
+    // The column list is built rather than literal so the pre-migration fallback below can
+    // drop one column without a second copy of the statement drifting from this one.
+    const insertSql = (withProject) => `INSERT INTO scheduled_posts
+           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at${withProject ? ', project_slug' : ''})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?${withProject ? ', ?' : ''})`;
+    const baseBinds = [
+      id,
+      ig_user_id,
+      platform,
+      type,
+      JSON.stringify(asset_keys),
+      cover_key ?? null,
+      caption,
+      post_at,
+      now,
+    ];
+
     try {
-      await env.DB.prepare(
-        `INSERT INTO scheduled_posts
-           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at, project_slug)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?, ?)`
-      )
-        .bind(
-          id,
-          ig_user_id,
-          platform,
-          type,
-          JSON.stringify(asset_keys),
-          cover_key ?? null,
-          caption,
-          post_at,
-          now,
+      try {
+        await env.DB.prepare(insertSql(true))
           // Which local project this came from, so the desktop sidebar can file the post
           // under it (decisions/content-project-model.md). Optional and never validated:
           // projects live in ~/.bg/processing on the creator's machine and the server has
-          // no way to check a slug against anything. NULL means "not linked", which is the
-          // honest value for a post made outside a project.
-          project_slug
-        )
-        .run();
+          // no way to check a slug against anything.
+          .bind(...baseBinds, project_slug)
+          .run();
+      } catch (err) {
+        // PRE-MIGRATION FALLBACK. Pages deploys on git push; D1 migrations are run by
+        // hand. So there is a real window where this code is live and the column is not
+        // there yet — and an INSERT naming a missing column fails outright, which would
+        // break ALL scheduling for a paying customer until someone noticed. "Always
+        // migrate first" is a hope, not a mitigation.
+        //
+        // Narrowly scoped to the missing-column error: a UNIQUE violation or a dead
+        // database must still surface, because retrying blindly and reporting success
+        // would be worse than the bug this guards against.
+        if (!/no column named project_slug|no such column: project_slug/i.test(err?.message || '')) {
+          throw err;
+        }
+        console.warn('scheduled_posts.project_slug missing — run migration 0013; '
+                     + 'writing without it so scheduling keeps working');
+        await env.DB.prepare(insertSql(false)).bind(...baseBinds).run();
+      }
     } catch (err) {
       console.error('D1 insert error (scheduled_posts):', { message: err?.message });
       // Generic conflict — don't echo the caller-supplied id (cross-tenant existence oracle).
@@ -156,17 +175,27 @@ export async function onRequest(context) {
   if (request.method === 'GET') {
     // ig_user_id is scoped from the bearer token — no query param needed/accepted
 
-    let rows;
-    try {
-      const result = await env.DB.prepare(
-        `SELECT id, platform, type, post_at, status, permalink, error, caption, project_slug
+    const selectSql = (withProject) =>
+      `SELECT id, platform, type, post_at, status, permalink, error, caption${withProject ? ', project_slug' : ''}
          FROM scheduled_posts
          WHERE ig_user_id = ?
-         ORDER BY post_at ASC`
-      )
-        .bind(ig_user_id)
-        .all();
-      rows = result.results;
+         ORDER BY post_at ASC`;
+
+    let rows;
+    try {
+      try {
+        rows = (await env.DB.prepare(selectSql(true)).bind(ig_user_id).all()).results;
+      } catch (err) {
+        // Same pre-migration window as the INSERT above. A listing that 500s hides every
+        // scheduled post a creator has — a far worse outcome than not yet knowing which
+        // project each came from.
+        if (!/no column named project_slug|no such column: project_slug/i.test(err?.message || '')) {
+          throw err;
+        }
+        console.warn('scheduled_posts.project_slug missing — run migration 0013; '
+                     + 'listing without it');
+        rows = (await env.DB.prepare(selectSql(false)).bind(ig_user_id).all()).results;
+      }
     } catch (err) {
       console.error('D1 select error (scheduled_posts):', err);
       return json({ ok: false, error: 'Could not fetch scheduled posts' }, 500);
