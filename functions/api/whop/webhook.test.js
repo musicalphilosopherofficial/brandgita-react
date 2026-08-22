@@ -9,11 +9,15 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { onRequest } from './webhook.js';
 
-const SECRET_RAW = Buffer.from('a'.repeat(32)); // 32 raw bytes
-const SECRET = 'whsec_' + SECRET_RAW.toString('base64');
+// Real Whop secrets look like ws_<64 hex chars> and are used as their RAW ASCII BYTES —
+// no decoding, confirmed against Whop's own docs 2026-08-22. Signing here with the same
+// scheme the endpoint verifies against is what makes these tests prove something: they
+// fail if the two ever drift, the way the first pass (which base64-DECODED the secret)
+// would have failed against every real Whop webhook forever.
+const SECRET = 'ws_' + 'ab'.repeat(32); // 64 hex chars, shaped like a real Whop secret
 
 function sign(id, timestamp, body) {
-  const mac = createHmac('sha256', SECRET_RAW).update(`${id}.${timestamp}.${body}`).digest('base64');
+  const mac = createHmac('sha256', SECRET).update(`${id}.${timestamp}.${body}`).digest('base64');
   return `v1,${mac}`;
 }
 
@@ -102,7 +106,7 @@ test('a TAMPERED body is rejected even with a syntactically valid signature head
 
 test('wrong secret is rejected', async () => {
   const env = makeEnv();
-  env.WHOP_WEBHOOK_SECRET = 'whsec_' + Buffer.from('b'.repeat(32)).toString('base64');
+  env.WHOP_WEBHOOK_SECRET = 'ws_' + 'cd'.repeat(32); // a DIFFERENT real-shaped secret
   const body = membershipPayload('membership.activated');
   const res = await onRequest({ request: req(body), env }); // signed with SECRET, not env's
   assert.equal(res.status, 401);

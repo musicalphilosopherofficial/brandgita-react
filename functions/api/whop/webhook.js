@@ -6,22 +6,25 @@
  * (decisions/public-endpoint-hardening.md §3 names that as un-replaced). This is the
  * receiver + storage half only — wiring /api/token to check whop_memberships instead is a
  * separate change, blocked on the desktop app having a way to identify which Whop
- * customer it belongs to. Building this now because Whop needs a live URL to set up the
- * webhook against, and a URL that 404s fails their setup check.
+ * customer it belongs to.
  *
- * SIGNATURE VERIFICATION — Whop follows the Standard Webhooks spec
- * (https://www.standardwebhooks.com/): three headers, `webhook-id`, `webhook-timestamp`,
- * `webhook-signature`. The signed message is `{webhook-id}.{webhook-timestamp}.{raw body}`,
- * HMAC-SHA256'd with the webhook secret Whop shows ONCE at webhook-creation time (format
- * `whsec_<base64>` per the Standard Webhooks convention — the `whsec_` prefix is stripped
- * and the remainder base64-decoded to get the raw key bytes). `webhook-signature` carries
- * the result as `v1,<base64>` — comparison is constant-time.
+ * SIGNATURE VERIFICATION — CONFIRMED against Whop's own docs 2026-08-22, for this
+ * account's webhook (api_version v1). Three headers: `webhook-id`, `webhook-timestamp`,
+ * `webhook-signature`. Signed message: `{webhook-id}.{webhook-timestamp}.{raw body}`,
+ * HMAC-SHA256'd, digest base64-encoded. `webhook-signature` carries the result as
+ * `v1,<base64>`.
  *
- * ⚠️ NOT YET CONFIRMED AGAINST A REAL WHOP WEBHOOK. Built from Whop's own docs
- * (docs.whop.com/developer/guides/webhooks) and the Standard Webhooks spec they say they
- * follow, but no live event has hit this code yet. The first real test send from Whop's
- * dashboard is the actual verification — if it 401s, capture the raw headers and body and
- * fix the mismatch here rather than assume the endpoint or the secret is wrong.
+ * KEY HANDLING — the one detail that is easy to get wrong and did get wrong here on the
+ * first pass: the `ws_...` secret is used as its RAW ASCII BYTES as the HMAC key. It is
+ * NOT base64-encoded and must not be decoded. (Whop's own SDK base64-ENCODES the raw
+ * secret before handing it to a generic Standard-Webhooks verifier library that expects a
+ * base64-formatted key; that library then decodes it right back — net effect is identical
+ * to using the raw bytes directly, which is what a hand-rolled Worker should just do.) The
+ * first implementation of this endpoint instead tried to base64-DECODE the secret, which
+ * for a real `ws_...` value (contains `_`, not valid base64) either throws or derives the
+ * wrong key entirely — every real webhook would have 401'd forever. Caught before any real
+ * Whop event hit this code, by asking Whop's own assistant for the exact spec rather than
+ * trusting my first pass against the public docs.
  *
  * FAILS CLOSED, unlike the rate limiter elsewhere in this codebase. Accepting a forged
  * membership.activated grants free access; accepting a forged membership.deactivated
@@ -38,24 +41,22 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
-function base64ToBytes(b64) {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
-
 function bytesToBase64(bytes) {
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin);
 }
 
-/** Raw HMAC key bytes from Whop's `whsec_<base64>` secret format. */
+/** The `ws_...` secret's raw ASCII bytes, used directly as the HMAC key — confirmed via
+ * Whop's own docs 2026-08-22. No prefix stripping, no base64 decoding. */
 async function importSigningKey(secret) {
-  const withoutPrefix = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret;
-  const keyBytes = base64ToBytes(withoutPrefix);
-  return crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
 }
 
 /**
