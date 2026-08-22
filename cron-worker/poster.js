@@ -23,23 +23,17 @@
 //     fail immediately with error 'TOKEN_EXPIRED' so the desktop app can prompt
 //     a reconnect.
 
-import { encryptToken, decryptToken } from './_crypto.js';
-
-const GRAPH_BASE = 'https://graph.instagram.com/v21.0';
-const MEDIA_BASE = 'https://brandgita.com/api/media';
+import { adapterFor, ADAPTERS } from './platforms/index.js';
+import { DEFAULT_PLATFORM, contractFor } from '../shared/platform-contracts.js';
+import { MEDIA_BASE } from './util.js';
 
 // Container processing poll configuration (reels are transcoded async by Meta).
+// Lives here rather than in platforms/instagram.js because processPost's own
+// signature (below) needs concrete numeric defaults, and that signature must
+// stay stable across the platform-adapter split — see the comment above
+// processPost for why.
 const POLL_INTERVAL_MS = 10_000; // 10 seconds
 const POLL_MAX_MS = 5 * 60_000;  // 5 minutes
-
-// mediaBase/sleepFn/pollIntervalMs/pollMaxMs are parameters (default = today's
-// real values) purely so characterization tests (cron-worker/poster.test.js)
-// can inject a fake media host, a zero-delay sleep, and a short poll deadline.
-// The deadline must be injectable separately from sleepFn: the poll loop's
-// `while (Date.now() < deadline)` check is real wall-clock time regardless of
-// whether sleepFn is instant, so a timeout test with only sleepFn faked would
-// still burn 5 real minutes spinning on Date.now(). Production callers never
-// pass any of these — default parameters preserve today's behaviour exactly.
 
 // retry_count at which the *current* attempt is the final (5th) one.
 const MAX_RETRY_BEFORE_PERMANENT_FAIL = 4;
@@ -48,89 +42,8 @@ const MAX_RETRY_BEFORE_PERMANENT_FAIL = 4;
 // Small helpers
 // ---------------------------------------------------------------------------
 
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function mediaUrl(key, mediaBase = MEDIA_BASE) {
-  // key may contain slashes (e.g. "user123/clip.mp4"); encode each segment so
-  // the path stays valid while preserving the directory structure.
-  const encoded = String(key)
-    .split('/')
-    .map((seg) => encodeURIComponent(seg))
-    .join('/');
-  return `${mediaBase}/${encoded}`;
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Custom error that carries the Meta error code so the caller can detect 190.
-class IgApiError extends Error {
-  constructor(message, code) {
-    super(message);
-    this.name = 'IgApiError';
-    this.igCode = code; // numeric Meta error code, or undefined
-  }
-}
-
-// POST a form-encoded body to the Graph API and return parsed JSON.
-// Throws IgApiError (with igCode) on any non-ok response or embedded error.
-async function igPost(path, params, accessToken) {
-  const body = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && v !== '') body.set(k, String(v));
-  }
-  body.set('access_token', accessToken);
-
-  let res;
-  let data;
-  try {
-    res = await fetch(`${GRAPH_BASE}/${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
-    data = await res.json();
-  } catch (err) {
-    // Network / parse failure — log the I/O failure path and rethrow.
-    console.error(`IG POST ${path} network error:`, err);
-    throw new IgApiError(`Network error calling ${path}: ${err.message}`);
-  }
-
-  if (!res.ok || data?.error) {
-    const code = data?.error?.code;
-    const msg = data?.error?.message || `IG POST ${path} failed (HTTP ${res.status})`;
-    console.error(`IG POST ${path} error:`, data);
-    throw new IgApiError(msg, code);
-  }
-  return data;
-}
-
-// GET a Graph API resource and return parsed JSON. Same error semantics as igPost.
-async function igGet(path, fields, accessToken) {
-  const url = new URL(`${GRAPH_BASE}/${path}`);
-  if (fields) url.searchParams.set('fields', fields);
-  url.searchParams.set('access_token', accessToken);
-
-  let res;
-  let data;
-  try {
-    res = await fetch(url.toString());
-    data = await res.json();
-  } catch (err) {
-    console.error(`IG GET ${path} network error:`, err);
-    throw new IgApiError(`Network error calling ${path}: ${err.message}`);
-  }
-
-  if (!res.ok || data?.error) {
-    const code = data?.error?.code;
-    const msg = data?.error?.message || `IG GET ${path} failed (HTTP ${res.status})`;
-    console.error(`IG GET ${path} error:`, data);
-    throw new IgApiError(msg, code);
-  }
-  return data;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,122 +98,19 @@ async function handleRetryableFailure(env, post, errorText) {
 }
 
 // ---------------------------------------------------------------------------
-// Instagram publish flows
-// ---------------------------------------------------------------------------
-
-// Poll a media container until it reaches FINISHED, or throw on ERROR/timeout.
-async function waitForContainerReady(
-  igUserId, creationId, accessToken,
-  sleepFn = sleep, pollIntervalMs = POLL_INTERVAL_MS, pollMaxMs = POLL_MAX_MS
-) {
-  const deadline = Date.now() + pollMaxMs;
-
-  while (Date.now() < deadline) {
-    const statusData = await igGet(creationId, 'status_code', accessToken);
-    const code = statusData.status_code;
-
-    if (code === 'FINISHED') return;
-    if (code === 'ERROR' || code === 'EXPIRED') {
-      throw new IgApiError(`Container ${creationId} processing returned status ${code}`);
-    }
-    // IN_PROGRESS / PUBLISHED-not-yet — keep polling.
-    await sleepFn(pollIntervalMs);
-  }
-
-  throw new IgApiError(`Container ${creationId} did not finish within ${pollMaxMs / 1000}s`);
-}
-
-// Publish a finished container and return its permalink.
-async function publishAndGetPermalink(igUserId, creationId, accessToken) {
-  const publishRes = await igPost(`${igUserId}/media_publish`, { creation_id: creationId }, accessToken);
-  const mediaId = publishRes.id;
-  if (!mediaId) {
-    throw new IgApiError(`media_publish returned no media id for container ${creationId}`);
-  }
-
-  const permaRes = await igGet(mediaId, 'permalink', accessToken);
-  return permaRes.permalink || null;
-}
-
-// REEL: create container -> poll -> publish -> permalink.
-async function postReel(
-  post, assetKeys, accessToken,
-  mediaBase = MEDIA_BASE, sleepFn = sleep, pollIntervalMs = POLL_INTERVAL_MS, pollMaxMs = POLL_MAX_MS
-) {
-  const igUserId = post.ig_user_id;
-
-  if (!assetKeys.length) {
-    throw new IgApiError('Reel has no asset keys');
-  }
-
-  const params = {
-    media_type: 'REELS',
-    video_url: mediaUrl(assetKeys[0], mediaBase),
-    caption: post.caption || '',
-  };
-  // cover_url is optional — only include when a cover_key exists.
-  if (post.cover_key) {
-    params.cover_url = mediaUrl(post.cover_key, mediaBase);
-  }
-
-  const createRes = await igPost(`${igUserId}/media`, params, accessToken);
-  const creationId = createRes.id;
-  if (!creationId) {
-    throw new IgApiError('Reel container creation returned no id');
-  }
-
-  // Reels are transcoded asynchronously; wait for FINISHED before publishing.
-  await waitForContainerReady(igUserId, creationId, accessToken, sleepFn, pollIntervalMs, pollMaxMs);
-
-  return publishAndGetPermalink(igUserId, creationId, accessToken);
-}
-
-// CAROUSEL: create one child container per image -> create carousel container
-// -> publish -> permalink.
-async function postCarousel(post, assetKeys, accessToken, mediaBase = MEDIA_BASE) {
-  const igUserId = post.ig_user_id;
-
-  if (assetKeys.length < 2) {
-    throw new IgApiError('Carousel requires at least 2 items');
-  }
-
-  // 1. Create a child container for each image.
-  const childIds = [];
-  for (const key of assetKeys) {
-    const childRes = await igPost(
-      `${igUserId}/media`,
-      { image_url: mediaUrl(key, mediaBase), is_carousel_item: 'true' },
-      accessToken
-    );
-    if (!childRes.id) {
-      throw new IgApiError(`Carousel child creation returned no id for key ${key}`);
-    }
-    childIds.push(childRes.id);
-  }
-
-  // 2. Create the parent carousel container referencing all children.
-  const carouselRes = await igPost(
-    `${igUserId}/media`,
-    {
-      media_type: 'CAROUSEL',
-      children: childIds.join(','),
-      caption: post.caption || '',
-    },
-    accessToken
-  );
-  const carouselId = carouselRes.id;
-  if (!carouselId) {
-    throw new IgApiError('Carousel container creation returned no id');
-  }
-
-  // 3. Publish and return the permalink. (Image carousels are typically ready
-  // immediately; media_publish will surface a not-ready error if not, which is
-  // retried by the outer handler.)
-  return publishAndGetPermalink(igUserId, carouselId, accessToken);
-}
-
-// ---------------------------------------------------------------------------
-// Per-post orchestration
+// Per-post orchestration — platform-agnostic dispatcher.
+//
+// mediaBase/sleepFn/pollIntervalMs/pollMaxMs are parameters (default = today's
+// real values) purely so characterization tests (cron-worker/poster.test.js)
+// can inject a fake media host, a zero-delay sleep, and a short poll deadline.
+// The deadline must be injectable separately from sleepFn: a poll loop's
+// `while (Date.now() < deadline)` check is real wall-clock time regardless of
+// whether sleepFn is instant, so a timeout test with only sleepFn faked would
+// still burn 5 real minutes spinning on Date.now(). Production callers never
+// pass any of these — default parameters preserve today's behaviour exactly.
+// This function packages them into a single `deps` object before handing them
+// to an adapter's publish(), rather than adding a 5th/6th positional param to
+// this signature every time a new platform needs a new injectable.
 // ---------------------------------------------------------------------------
 
 async function processPost(
@@ -308,28 +118,33 @@ async function processPost(
   mediaBase = MEDIA_BASE, sleepFn = sleep, pollIntervalMs = POLL_INTERVAL_MS, pollMaxMs = POLL_MAX_MS
 ) {
   // Atomically claim the post. If another overlapping run already claimed it,
-  // bail out immediately — do NOT publish (prevents double-posting to Instagram).
+  // bail out immediately — do NOT publish (prevents double-posting).
   const won = await claimPost(env, post.id);
   if (!won) return;
 
-  // Look up the access token for this user.
-  const tokenRow = await env.DB.prepare(
-    `SELECT access_token FROM ig_tokens WHERE ig_user_id = ?`
-  ).bind(post.ig_user_id).first();
+  // Belt-and-braces on top of the DB DEFAULT (migration 0012 defaults every
+  // row's `platform` column to 'ig'): a null/undefined value reaching
+  // adapterFor() would permanently fail a real customer's post over a schema
+  // technicality, not an actual unknown platform.
+  const platform = post.platform || DEFAULT_PLATFORM;
 
-  if (!tokenRow || !tokenRow.access_token) {
-    // No token at all — permanent failure, nothing to retry against.
-    await markFailed(env, post.id, 'No token for user');
+  let adapter;
+  try {
+    adapter = adapterFor(platform);
+  } catch (err) {
+    // Unknown platform — not retryable, there is no adapter to retry with.
+    console.error(`Post ${post.id} [platform=${platform}] unknown platform:`, err.message);
+    await markFailed(env, post.id, err.message);
     return;
   }
 
-  // Decrypt the IG access token before presenting it to Meta.
-  let accessToken;
-  try {
-    accessToken = await decryptToken(tokenRow.access_token, env);
-  } catch (err) {
-    console.error(`Token decrypt failed for post ${post.id}:`, { message: err?.message });
-    await handleRetryableFailure(env, post, 'Token decrypt failed');
+  const credsResult = await adapter.loadCredentials(env, post);
+  if (!credsResult.ok) {
+    if (credsResult.permanent) {
+      await markFailed(env, post.id, credsResult.error);
+    } else {
+      await handleRetryableFailure(env, post, credsResult.error);
+    }
     return;
   }
 
@@ -343,26 +158,37 @@ async function processPost(
     return;
   }
 
+  // Content-type validity is a platform fact, already checked once at create
+  // time (functions/api/schedule.js, via this SAME contract) — this is a
+  // defensive re-check at publish time for a row that predates that
+  // validation or was altered at rest. Reading from the identical contract
+  // rather than a separately-maintained list means the two checks cannot
+  // silently drift apart.
+  const contract = contractFor(platform);
+  if (!contract.contentTypes.includes(post.type)) {
+    // Unknown type — not retryable.
+    await markFailed(env, post.id, `Unknown post type: ${post.type}`);
+    return;
+  }
+
   try {
-    let permalink;
-    if (post.type === 'reel') {
-      permalink = await postReel(post, assetKeys, accessToken, mediaBase, sleepFn, pollIntervalMs, pollMaxMs);
-    } else if (post.type === 'carousel') {
-      permalink = await postCarousel(post, assetKeys, accessToken, mediaBase);
-    } else {
-      // Unknown type — not retryable.
-      await markFailed(env, post.id, `Unknown post type: ${post.type}`);
-      return;
-    }
+    const { permalink } = await adapter.publish({
+      post,
+      assetKeys,
+      creds: credsResult.creds,
+      deps: { mediaBase, sleepFn, pollIntervalMs, pollMaxMs },
+    });
 
     await markPosted(env, post.id, permalink);
-    console.log(`Post ${post.id} published: ${permalink}`);
+    console.log(`Post ${post.id} [platform=${platform}] published: ${permalink}`);
   } catch (err) {
-    // Token expired/invalid — fail permanently with the sentinel the desktop
-    // app polls for, regardless of retry_count.
-    if (err instanceof IgApiError && err.igCode === 190) {
+    // Auth expired/invalid — fail permanently with the sentinel the desktop
+    // app polls for, regardless of retry_count. The literal string
+    // 'TOKEN_EXPIRED' is fixed here and must never change; only WHICH errors
+    // trigger it is generalised, behind adapter.isAuthExpired().
+    if (adapter.isAuthExpired(err)) {
       await markFailed(env, post.id, 'TOKEN_EXPIRED');
-      console.error(`Post ${post.id} failed: token expired (code 190)`);
+      console.error(`Post ${post.id} [platform=${platform}] failed: auth expired`);
       return;
     }
 
@@ -372,54 +198,13 @@ async function processPost(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Token refresh (long-lived IG tokens must be refreshed before expiry)
-// ---------------------------------------------------------------------------
-
-async function refreshExpiringTokens(env) {
-  let rows;
-  try {
-    const result = await env.DB.prepare(
-      `SELECT ig_user_id, access_token FROM ig_tokens
-       WHERE token_expiry <= datetime('now', '+7 days')`
-    ).all();
-    rows = result.results || [];
-  } catch (err) {
-    console.error('Token refresh: failed to query ig_tokens:', err);
-    return;
-  }
-
-  for (const row of rows) {
-    try {
-      const currentToken = await decryptToken(row.access_token, env);
-
-      const url = new URL('https://graph.instagram.com/refresh_access_token');
-      url.searchParams.set('grant_type', 'ig_refresh_token');
-      url.searchParams.set('access_token', currentToken);
-
-      const res = await fetch(url.toString());
-      const data = await res.json();
-
-      if (!res.ok || !data.access_token) {
-        // Scalar-only log — `data` is the refresh response and can carry a token.
-        console.error(`Token refresh failed for ${row.ig_user_id}:`, { status: res.status, code: data?.error?.code });
-        continue;
-      }
-
-      // expires_in is in seconds (typically ~60 days for IG long-lived tokens).
-      const expiryIso = new Date(Date.now() + (data.expires_in || 0) * 1000).toISOString();
-      const encrypted = await encryptToken(data.access_token, env);
-      await env.DB.prepare(
-        `UPDATE ig_tokens SET access_token = ?, token_expiry = ?, updated_at = ? WHERE ig_user_id = ?`
-      ).bind(encrypted, expiryIso, nowIso(), row.ig_user_id).run();
-
-      console.log(`Refreshed token for ${row.ig_user_id}, new expiry ${expiryIso}`);
-    } catch (err) {
-      // Never let one user's refresh failure abort the rest.
-      console.error(`Token refresh error for ${row.ig_user_id}:`, err);
-    }
-  }
-}
+// Back-compat named export: cron-worker/poster.test.js's characterization
+// suite (written before the platform-adapter split, kept byte-for-byte
+// unchanged through it as proof the refactor is behaviour-preserving) imports
+// `refreshExpiringTokens` directly from this module. The real implementation
+// now lives on the Instagram adapter (platforms/instagram.js) — this is a
+// thin pass-through so that test file's import surface needed zero edits.
+export const refreshExpiringTokens = (env) => ADAPTERS.ig.refreshExpiringTokens(env);
 
 // ---------------------------------------------------------------------------
 // Due-post batch — find due posts, process each in isolation.
@@ -482,21 +267,32 @@ async function runDue(env, deps = {}) {
 // Named exports below are ONLY for cron-worker/poster.test.js (characterization
 // tests written ahead of a planned restructure). The Worker runtime consumes
 // nothing but `default.scheduled` — Wrangler doesn't even look at named exports
-// on a scheduled handler — so these are inert in production.
-export { processPost, refreshExpiringTokens, handleRetryableFailure, claimPost, runDue };
+// on a scheduled handler — so these are inert in production. (refreshExpiringTokens
+// is exported separately above, as a pass-through to the Instagram adapter.)
+export { processPost, handleRetryableFailure, claimPost, runDue };
 
 export default {
   async scheduled(event, env, ctx) {
     await runDue(env, {});
 
-    // Refresh tokens nearing expiry. Runs every cron tick, wrapped so a
-    // failure here never affects publishing above, and unconditionally —
-    // even if runDue's due-posts query itself failed (see the comment inside
+    // Refresh credentials for every registered platform that defines a sweep.
+    // Each platform's refresh is individually try/caught so one platform's
+    // failure can't touch another's — the same isolation principle as the
+    // per-post loop in runDue. This runs unconditionally after runDue, even
+    // if runDue's due-posts query itself failed (see the comment inside
     // runDue: it swallows that error rather than rethrow it here).
-    try {
-      await refreshExpiringTokens(env);
-    } catch (err) {
-      console.error('Poster: token refresh pass failed:', err);
+    for (const adapter of Object.values(ADAPTERS)) {
+      // refreshExpiringTokens is OPTIONAL on the adapter contract: Instagram's
+      // long-lived token needs a periodic sweep before it expires, but a
+      // platform whose model is lazy refresh-at-publish-time (nothing to
+      // sweep ahead of time) should simply not implement this method, rather
+      // than carry a no-op stub.
+      if (typeof adapter.refreshExpiringTokens !== 'function') continue;
+      try {
+        await adapter.refreshExpiringTokens(env);
+      } catch (err) {
+        console.error(`Poster: token refresh pass failed for platform=${adapter.id}:`, err);
+      }
     }
   },
 };
