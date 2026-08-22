@@ -160,3 +160,44 @@ export async function validateDevice(membershipId, deviceHash, env) {
   console.error('Whop validate_license unexpected status:', { status: res.status });
   return { ok: false, status: 502, error: 'Device check failed' };
 }
+
+/**
+ * Clear a licence's device binding — `PATCH /memberships/{id}` with `{"metadata": {}}`.
+ *
+ * Confirmed live 2026-08-22 against a real membership, full cycle: reset -> rebind to a
+ * NEW device (201) -> re-lock enforced against a THIRD device (400). Uses the SAME
+ * `member:manage` permission already enabled for `validate_license` — no new scope.
+ *
+ * DELIBERATELY NOT WIRED to any endpoint yet. This is the mechanism a support flow needs
+ * ("creator got a new laptop, let them back in"), but WHO is allowed to call it is a real
+ * decision this module should not make unilaterally — it must be gated behind the
+ * creator's own authenticated identity (so a customer can only reset THEIR OWN licence,
+ * never someone else's) before it is reachable from any endpoint. See the founder for
+ * where that flow should live (self-serve in the desktop app vs. a support action).
+ */
+export async function resetDeviceLock(membershipId, env) {
+  if (!env.WHOP_COMPANY_API) {
+    return { ok: false, status: 503, error: 'License checking not configured' };
+  }
+
+  let res;
+  try {
+    res = await fetch(`${WHOP_API_BASE}/memberships/${encodeURIComponent(membershipId)}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${env.WHOP_COMPANY_API}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ metadata: {} }),
+    });
+  } catch (err) {
+    console.error('Whop device-lock reset failed (network):', { message: err?.message });
+    return { ok: false, status: 502, error: 'Could not reach Whop' };
+  }
+
+  if (!res.ok) {
+    console.error('Whop device-lock reset non-OK:', { status: res.status });
+    return { ok: false, status: 502, error: 'Reset failed' };
+  }
+  return { ok: true };
+}

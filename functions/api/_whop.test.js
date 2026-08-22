@@ -140,3 +140,47 @@ test('a network failure fails closed', async () => {
   assert.equal(r.ok, false);
   assert.equal(r.status, 502);
 });
+
+// ── resetDeviceLock ───────────────────────────────────────────────────────────
+
+import { resetDeviceLock } from './_whop.js';
+
+test('a successful reset returns ok', async () => {
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', metadata: {} });
+  const r = await resetDeviceLock('mem_x', { WHOP_COMPANY_API: 'k' });
+  assert.deepEqual(r, { ok: true });
+});
+
+test('sends PATCH with empty metadata, not POST validate_license', async () => {
+  let capturedMethod, capturedBody, capturedUrl;
+  globalThis.fetch = async (url, opts) => {
+    capturedUrl = url;
+    capturedMethod = opts.method;
+    capturedBody = JSON.parse(opts.body);
+    return new Response('{}', { status: 200 });
+  };
+  await resetDeviceLock('mem_x', { WHOP_COMPANY_API: 'k' });
+  assert.equal(capturedMethod, 'PATCH');
+  assert.deepEqual(capturedBody, { metadata: {} });
+  assert.ok(!String(capturedUrl).includes('validate_license'));
+});
+
+test('a non-OK response fails, not silently treated as reset', async () => {
+  globalThis.fetch = mockFetch(404, {});
+  const r = await resetDeviceLock('mem_doesnotexist', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 502);
+});
+
+test('missing WHOP_COMPANY_API fails closed', async () => {
+  const r = await resetDeviceLock('mem_x', {});
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 503);
+});
+
+test('a network failure fails closed', async () => {
+  globalThis.fetch = async () => { throw new Error('down'); };
+  const r = await resetDeviceLock('mem_x', { WHOP_COMPANY_API: 'k' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 502);
+});
