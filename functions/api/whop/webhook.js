@@ -2,11 +2,18 @@
  * POST /api/whop/webhook — receives Whop's membership.activated / membership.deactivated
  * events and mirrors membership state into `whop_memberships`.
  *
- * THIS ENDPOINT DOES NOT YET GATE ANYTHING. /api/token still checks the shared API_SECRET
- * (decisions/public-endpoint-hardening.md §3 names that as un-replaced). This is the
- * receiver + storage half only — wiring /api/token to check whop_memberships instead is a
- * separate change, blocked on the desktop app having a way to identify which Whop
- * customer it belongs to.
+ * STILL RECEIVER + STORAGE ONLY — this endpoint mirrors membership state into
+ * `whop_memberships`, but /api/token does not read that table. Per-customer entitlement on
+ * /api/token is gated a different way than originally planned here: the desktop sends
+ * `license_key` directly in the connect request body, and /api/token validates it LIVE
+ * against Whop's API on every call (checkWhopLicense in _whop.js), independent of whatever
+ * this webhook has stored. The shared API_SECRET is also gone from that gate — see
+ * TOKEN_PUBLIC_OK in token.js and decisions/public-endpoint-hardening.md §3 (parent repo).
+ *
+ * So `whop_memberships` exists today as a durable record of activation/deactivation events,
+ * not as the enforcement path. If something later needs a fast local read instead of a live
+ * Whop API call on the hot path, this table is what it would read from — that wiring does
+ * not exist yet.
  *
  * SIGNATURE VERIFICATION — CONFIRMED against Whop's own docs 2026-08-22, for this
  * account's webhook (api_version v1). Three headers: `webhook-id`, `webhook-timestamp`,
