@@ -254,3 +254,69 @@ test('a 401 from validate_license (missing member:manage) fails closed, not open
   assert.equal(res.status, 502);
   assert.equal(db.calls.length, 0);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROACH B — the shared secret is no longer required, but the endpoint must
+// not become unprotected (2026-08-29)
+//
+// x-api-secret was a secret held by EVERY installed copy of the desktop app, living in
+// electron-shell/.env — which was excluded from the package on 2026-08-29 after it was found
+// shipping inside app.asar alongside a licence-bypass flag. That exclusion was right, and it
+// broke licence validation outright: process.env.API_SECRET is undefined in a packaged build,
+// so validateLicenseKey answered "App is not configured" for every real key.
+//
+// Re-shipping the secret is not the answer — anyone who owns the bundle extracts it, and
+// token.js's own comment concedes it "authenticates THE APP (any copy of our binary), not the
+// customer". The licence key is the per-customer gate and always was.
+//
+// THE DANGER these tests exist for: requireRateLimit RETURNS NULL when its binding is missing
+// — it fails OPEN. Dropping the secret with no limiter bound would leave /api/token wide open,
+// and every call spends Whop quota from a 600/min bucket shared across all our operations
+// (confirmed with Whop, 2026-08-29). So: no secret is acceptable ONLY when rate limiting is live.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('a correct x-api-secret still works, unchanged', async () => {
+  global.fetch = mockFetch(whopActiveMock);
+  const res = await onRequest(makeContext({ code: 'OAUTH_CODE' }));
+  assert.notEqual(res.status, 401, 'the existing path must not regress');
+});
+
+test('a WRONG x-api-secret is still rejected — this is not a free-for-all', async () => {
+  global.fetch = mockFetch(whopActiveMock);
+  const res = await onRequest(makeContext({ code: 'OAUTH_CODE' }, { secret: 'not-the-secret' }));
+  assert.equal(res.status, 401);
+});
+
+test('NO secret is allowed ONLY when the operator has asserted TOKEN_PUBLIC_OK', async () => {
+  // The assertion is explicit because the protection is INVISIBLE TO THIS CODE. Pages rejects
+  // [[ratelimits]], so TOKEN_LIMITER can never bind and a rateLimitIsLive() gate would 503
+  // every packaged app forever. A WAF Rate Limiting Rule in the dashboard is the only option,
+  // and no code can see it — so a human confirms it, once.
+  global.fetch = mockFetch(whopActiveMock);
+  const ctx = makeContext({ code: 'OAUTH_CODE' }, { secret: null });
+  ctx.env.TOKEN_PUBLIC_OK = '1';
+  const res = await onRequest(ctx);
+  assert.notEqual(res.status, 401, 'a packaged app with no bundled secret must still work');
+});
+
+test('NO secret WITHOUT that assertion is refused — fail closed', async () => {
+  // The default, and the state production is in today: the WAF rule is documented as "still
+  // to be set up". Until it exists, this endpoint keeps the behaviour it has always had.
+  global.fetch = mockFetch(whopActiveMock);
+  const res = await onRequest(makeContext({ code: 'OAUTH_CODE' }, { secret: null }));
+  assert.equal(res.status, 401);
+});
+
+test('an INVALID licence is still refused when no secret is sent', async () => {
+  // Removing the app-level check must not weaken the customer-level one.
+  global.fetch = mockFetch((url) => {
+    if (String(url).includes('api.whop.com')) {
+      return { ok: false, status: 404, json: async () => ({ valid: false }) };
+    }
+    return whopActiveMock(url);
+  });
+  const ctx = makeContext({ code: 'OAUTH_CODE' }, { secret: null });
+  ctx.env.TOKEN_PUBLIC_OK = '1';
+  const res = await onRequest(ctx);
+  assert.ok(res.status >= 400, 'a dead licence must fail regardless of the secret');
+});

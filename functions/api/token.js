@@ -52,10 +52,37 @@ export async function onRequest(context) {
   const limited = await requireRateLimit(env, 'TOKEN_LIMITER', clientKey(request, 'token'), CORS);
   if (limited) return limited;
 
-  // Shared-secret auth — desktop app must send x-api-secret. This authenticates THE APP
-  // (any copy of our binary), not the customer — see the license_key check below for that.
-  if (request.headers.get('x-api-secret') !== env.API_SECRET) {
+  // Shared-secret auth — OPTIONAL since 2026-08-29 (approach B).
+  //
+  // x-api-secret authenticates THE APP (any copy of our binary), never the customer — the
+  // licence key below is the per-customer gate and always was. The secret lived in
+  // electron-shell/.env, which was excluded from the desktop package after it was found
+  // shipping inside app.asar next to a licence-bypass flag. Re-shipping it was not an option
+  // (anyone owning the bundle extracts it), so a packaged app now sends no secret at all.
+  //
+  // WRONG is still rejected — only ABSENT is tolerated, and only when rate limiting is live.
+  // requireRateLimit fails OPEN by design, so without this check an unbound limiter would
+  // leave this endpoint completely unprotected, and every call spends Whop quota from a
+  // 600/min bucket shared across all our operations (confirmed with Whop, 2026-08-29).
+  const sentSecret = request.headers.get('x-api-secret');
+  if (sentSecret !== null && sentSecret !== env.API_SECRET) {
     return json({ ok: false, error: 'Unauthorized' }, 401);
+  }
+  // An ABSENT secret is only safe once this endpoint is rate-limited by something. On Pages
+  // that cannot be code: wrangler rejects [[ratelimits]] for a Pages project outright, so
+  // TOKEN_LIMITER can NEVER bind here and rateLimitIsLive() would be false forever — gating on
+  // it would 503 every packaged app. The real protection is a WAF Rate Limiting Rule in the
+  // Cloudflare dashboard, which is invisible to this code.
+  //
+  // So the operator asserts it explicitly. TOKEN_PUBLIC_OK is set ONLY after that WAF rule is
+  // configured (decisions/public-endpoint-hardening.md — as of 2026-08-29 it is NOT, which is
+  // exactly why this defaults to refusing). Fail closed: an unset var means secret-required,
+  // the behaviour that has always shipped.
+  if (sentSecret === null && env.TOKEN_PUBLIC_OK !== '1') {
+    return json(
+      { ok: false, error: 'Unauthorized' },
+      401,
+    );
   }
 
   let body;
