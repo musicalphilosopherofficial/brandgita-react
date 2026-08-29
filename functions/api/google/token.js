@@ -28,6 +28,17 @@
  * WHAT THIS IS NOT. It does not store tokens, look at them, or log them — Google's response is
  * returned to the desktop app verbatim and the tokens live only on the creator's machine, the
  * same as before. The only thing added on this side is the client credential.
+ *
+ * ONE CREDENTIAL FOR THE WHOLE PRODUCT, not one per creator. GOOGLE_CLIENT_ID/SECRET identify
+ * Brand Gita as an application to Google, exactly as IG_CLIENT_ID/SECRET already do for Meta.
+ * Every creator's consent screen uses the same pair. What is per-creator is the access and
+ * refresh token that comes back afterwards — and that never touches this endpoint's storage,
+ * because this endpoint has none.
+ *
+ * ENVIRONMENT: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required. GOOGLE_REDIRECT_URI is
+ * NOT — the desktop app always sends its own loopback (http://127.0.0.1:9877/callback), which
+ * Google matches against the registered URI, so the value here is an unused fallback kept only
+ * so a caller that omits it fails with a named error rather than Google's.
  */
 
 import { requireRateLimit, clientKey } from '../_ratelimit.js';
