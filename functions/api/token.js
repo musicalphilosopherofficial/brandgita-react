@@ -75,9 +75,14 @@ export async function onRequest(context) {
   // Cloudflare dashboard, which is invisible to this code.
   //
   // So the operator asserts it explicitly. TOKEN_PUBLIC_OK is set ONLY after that WAF rule is
-  // configured (decisions/public-endpoint-hardening.md — as of 2026-08-29 it is NOT, which is
-  // exactly why this defaults to refusing). Fail closed: an unset var means secret-required,
-  // the behaviour that has always shipped.
+  // configured (decisions/public-endpoint-hardening.md). LIVE in production as of 2026-08-29 —
+  // verified by posting a deliberately invalid licence key with NO x-api-secret header, which
+  // returned 402 "License key not found" rather than 401: the request reached the Whop check,
+  // so the absent secret was tolerated. Verify it that way rather than assuming, since nothing
+  // in this file can observe the WAF rule that makes it safe.
+  //
+  // Fail closed regardless: an unset var means secret-required, the behaviour that has always
+  // shipped, so a fresh environment is never accidentally open.
   if (sentSecret === null && env.TOKEN_PUBLIC_OK !== '1') {
     return json(
       { ok: false, error: 'Unauthorized' },
