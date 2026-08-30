@@ -228,9 +228,18 @@ async function runDue(env, deps = {}) {
   // Find up to 10 due, still-scheduled posts under the retry cap.
   let duePosts = [];
   try {
+    // CRITICAL FIX 2026-08-30: post_at is stored verbatim as whatever ISO 8601 string the
+    // client sent (schedule.js never normalizes it) — a real client sends
+    // "2026-08-30T12:00:00.000Z" (Date#toISOString()'s format), while SQLite's own
+    // datetime('now') returns "2026-08-30 12:00:00" (space separator, no ms, no Z). A bare
+    // `post_at <= datetime('now')` is a lexicographic STRING comparison: 'T' (0x54) sorts
+    // AFTER ' ' (0x20), so ANY real ISO post_at compares as "later" than now regardless of
+    // the actual timestamps — proved directly: a post_at one hour in the PAST evaluated as
+    // NOT due. This meant no scheduled post could ever have fired through this query.
+    // datetime(post_at) parses the ISO string into SQLite's own comparable format first.
     const result = await env.DB.prepare(
       `SELECT * FROM scheduled_posts
-       WHERE post_at <= datetime('now')
+       WHERE datetime(post_at) <= datetime('now')
          AND status = 'scheduled'
          AND retry_count < 5
        LIMIT 10`
