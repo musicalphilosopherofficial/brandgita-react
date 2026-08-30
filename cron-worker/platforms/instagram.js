@@ -279,9 +279,17 @@ export const instagram = Object.freeze({
   async refreshExpiringTokens(env) {
     let rows;
     try {
+      // CRITICAL FIX 2026-08-30: the SAME lexicographic-string bug as poster.js's due-post
+      // query. token_expiry is stored via `new Date(...).toISOString()` (functions/api/
+      // token.js, token/refresh.js) — "...T...Z" — while datetime('now', '+7 days')
+      // returns SQLite's own "... ..." format. A bare `<=` string-compares them, and 'T'
+      // (0x54) sorts after ' ' (0x20), so a real token_expiry NEVER compares as due for
+      // refresh regardless of the actual date. This is almost certainly why real Instagram
+      // tokens have been expiring instead of auto-refreshing — the sweep that was supposed
+      // to catch them 7 days ahead of time could never have matched a single real row.
       const result = await env.DB.prepare(
         `SELECT ig_user_id, access_token FROM ig_tokens
-         WHERE token_expiry <= datetime('now', '+7 days')`
+         WHERE datetime(token_expiry) <= datetime('now', '+7 days')`
       ).all();
       rows = result.results || [];
     } catch (err) {
