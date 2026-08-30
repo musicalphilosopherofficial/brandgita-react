@@ -89,23 +89,58 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'File too large' }, 413);
     }
 
-    // Meter the stream so the cap holds even when Content-Length is absent or lying.
-    let total = 0;
-    const metered = request.body.pipeThrough(
-      new TransformStream({
-        transform(chunk, ctrl) {
-          total += chunk.byteLength;
-          if (total > MAX_BYTES) {
-            ctrl.error(new Error('File too large'));
-            return;
-          }
-          ctrl.enqueue(chunk);
-        },
-      })
-    );
+    // R2Bucket.put() REQUIRES a stream with a known length — it throws "the provided
+    // readable stream must have a known length" for a plain ReadableStream. Piping the
+    // request body through a bare `new TransformStream()` (the previous code) produces
+    // exactly that: piping strips the length the runtime tracked on the original
+    // request body, so every real upload landed in the catch block below as a generic
+    // 500 ("Upload to storage failed"). This was the production upload bug — found
+    // 2026-08-30 running the real desktop app against production; diagnosed and
+    // unit-verified in isolation, not deploy-verified (no local workerd/R2 available).
+    //
+    // Fix: when a Content-Length was declared (true for every real client — the desktop
+    // app's fetch sends a fixed-size Buffer, whose length undici/fetch sets
+    // automatically), pass it back as `expectedLength` so the piped stream still reads
+    // as fixed-length to the runtime and to R2.
+    let uploadBody;
+
+    if (declared > 0) {
+      // Meter the stream so the cap holds even if a chunked body lies about total size
+      // vs. the declared header — `expectedLength` only affects what R2 is told up
+      // front; the ctrl.error() below still aborts an over-length upload mid-flight.
+      let total = 0;
+      uploadBody = request.body.pipeThrough(
+        new TransformStream({
+          expectedLength: declared,
+          transform(chunk, ctrl) {
+            total += chunk.byteLength;
+            if (total > MAX_BYTES) {
+              ctrl.error(new Error('File too large'));
+              return;
+            }
+            ctrl.enqueue(chunk);
+          },
+        })
+      );
+    } else {
+      // No Content-Length at all (a genuinely chunked client body). R2 still needs a
+      // known length and there is nothing to declare up front, so buffer fully instead
+      // of streaming blind — MAX_BYTES bounds the memory this can cost.
+      let buf;
+      try {
+        buf = await request.arrayBuffer();
+      } catch (err) {
+        console.error('Request body read error:', { message: err?.message });
+        return json({ ok: false, error: 'Upload to storage failed' }, 500);
+      }
+      if (buf.byteLength > MAX_BYTES) {
+        return json({ ok: false, error: 'File too large' }, 413);
+      }
+      uploadBody = buf;
+    }
 
     try {
-      await env.SCHEDULE_BUCKET.put(key, metered, { httpMetadata: { contentType } });
+      await env.SCHEDULE_BUCKET.put(key, uploadBody, { httpMetadata: { contentType } });
     } catch (err) {
       console.error('R2 put error:', { message: err?.message });
       // A stream aborted by the size meter lands here too.
