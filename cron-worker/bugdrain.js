@@ -126,7 +126,11 @@ async function createGithubIssue(env, doFetch, row, parsed) {
   return j.html_url || String(j.number || '');
 }
 
-async function createNotionPage(env, doFetch, row, parsed) {
+// Exported so scripts/dry_run_notion_bugdrain.js can call the REAL, unmodified Notion
+// round-trip against a founder's own real workspace/token, without duplicating this
+// logic (which would drift) and without needing D1/GitHub bindings just to prove Notion
+// works.
+export async function createNotionPage(env, doFetch, row, parsed) {
   const res = await doFetch('https://api.notion.com/v1/pages', {
     method: 'POST',
     headers: {
