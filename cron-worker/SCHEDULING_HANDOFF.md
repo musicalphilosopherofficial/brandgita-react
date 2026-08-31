@@ -2,7 +2,7 @@
 
 **Repo:** `brandgita-react` (Cloudflare Pages Functions + cron Worker)
 **Branch:** `feature/patch-schedule-endpoint` (pushed) · **HEAD:** `7b19a91`
-**PR target:** `bg/v1` (never `main` directly)
+**PR target:** `main`
 **Companion docs:** `cron-worker/DESKTOP_HANDOFF.md` (endpoints that already existed),
 `cron-worker/PATCH_SCHEDULE_SPEC.md` (full PATCH spec)
 **Date:** 2026-08-21
