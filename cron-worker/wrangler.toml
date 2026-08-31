@@ -22,3 +22,22 @@ database_id = "c0c56a08-861b-402b-813d-cd8734e8977a"
 
 [triggers]
 crons = ["* * * * *"]
+
+# ── Workers Logs — free tier, no plan upgrade ────────────────────────────────
+# Retained, queryable logs in the dashboard. Free plan: 200k logs/day, 3-day
+# retention (Paid: 20M/month, 7 days). This cron fires once a minute — 1,440
+# invocations/day — so even a verbose run stays two orders of magnitude under
+# the free ceiling. Nothing here justifies Workers Paid on this account.
+#
+# The reason it's on: 59bbbcc was a silent failure. The due-post and
+# token-refresh queries never matched a real timestamp, threw nothing, and
+# logged nothing worth keeping — a bug that only shows up as an ABSENCE of
+# posts. Ephemeral `wrangler tail` cannot catch that, because you have to
+# already be watching. Retained logs can.
+#
+# Pages CANNOT do this — [observability] is not a supported Pages config key,
+# and Pages Function logs are real-time only, never stored. See the note in the
+# root wrangler.toml about Pages rejecting unsupported keys outright.
+[observability]
+enabled = true
+head_sampling_rate = 1

@@ -43,7 +43,7 @@ function mediaPublishUrl(igUserId) { return `${GRAPH_BASE}/${igUserId}/media_pub
 // and the due-query's own predicates (status, retry_count, LIMIT) can be
 // asserted against real row-state transitions, not just call recording.
 // ---------------------------------------------------------------------------
-function makeEnv({ posts = {}, tokens = {}, breakWriteWhen = null, breakDueQuery = false } = {}) {
+function makeEnv({ posts = {}, tokens = {}, breakWriteWhen = null, breakDueQuery = false, breakCountQuery = false } = {}) {
   // Deep-clone the seed rows so each test gets its own mutable state.
   const state = {
     posts: JSON.parse(JSON.stringify(posts)),
@@ -66,6 +66,25 @@ function makeEnv({ posts = {}, tokens = {}, breakWriteWhen = null, breakDueQuery
     if (sql.includes('SELECT access_token FROM ig_tokens WHERE ig_user_id = ?')) {
       const [igUserId] = args;
       return state.tokens[igUserId] || null;
+    }
+    // Diagnostic denominators for the "matched X of Y" logs. Mirror the real
+    // predicates for the same reason execAll does: countRows() swallows every
+    // failure by design, so a fake that threw here would leave the denominator
+    // silently rendering '?' in every test while the suite still went green —
+    // which is precisely the blindness these logs exist to remove.
+    // Checked BEFORE the handlers below — placed after them it could never fire,
+    // since each returns first.
+    if (breakCountQuery && sql.includes('COUNT(*) AS n')) {
+      throw new Error('D1 down (simulated count failure)');
+    }
+    if (sql.includes('COUNT(*) AS n FROM scheduled_posts')) {
+      let rows = Object.values(state.posts);
+      if (sql.includes(`status = 'scheduled'`)) rows = rows.filter((r) => r.status === 'scheduled');
+      if (sql.includes('retry_count < 5')) rows = rows.filter((r) => (r.retry_count ?? 0) < 5);
+      return { n: rows.length };
+    }
+    if (sql.includes('COUNT(*) AS n FROM ig_tokens')) {
+      return { n: Object.values(state.tokens).length };
     }
     throw new Error(`fake D1: unhandled .first() SQL: ${sql}`);
   }
@@ -694,6 +713,34 @@ test('scheduled(): the token-refresh pass still runs even when the due-posts que
   await posterDefault.scheduled({}, env, {});
 
   assert.equal(state.tokens['user-good'].access_token.startsWith('v1:'), true, 'refresh pass ran and re-encrypted the token despite the due query throwing');
+});
+
+test('a failing diagnostic count NEVER blocks posting — the denominator degrades, the run does not', async () => {
+  // The "matched X of Y" denominator exists to make a silent bug visible. A
+  // denominator that could itself break posting would be a strictly worse bug
+  // than the blindness it fixes, so countRows() swallows everything and returns
+  // null. This proves that contract against the real code path, not by reading it.
+  const { env, state } = makeEnv({
+    breakCountQuery: true,
+    posts: { 'post-1': post() },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  makeFetchMock([
+    [isCreate, () => jsonOk({ id: 'container-1' })],
+    [isPollStatus, () => jsonOk({ status_code: 'FINISHED' })],
+    [isPublish, () => jsonOk({ id: 'media-1' })],
+    [isPermalink, () => jsonOk({ permalink: 'https://instagram.com/p/abc' })],
+    [(u) => u.includes('refresh_access_token'),
+      () => jsonOk({ access_token: 'new-long-tok', expires_in: 5_184_000 })],
+  ]);
+
+  await posterDefault.scheduled({}, env, {});
+
+  assert.equal(
+    state.posts['post-1'].status,
+    'posted',
+    'the post still published even though its diagnostic count query threw'
+  );
 });
 
 // ---------------------------------------------------------------------------

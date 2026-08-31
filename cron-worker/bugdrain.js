@@ -29,6 +29,8 @@
  * authenticated route, referenced from the issue by opaque id only.
  */
 
+import { countRows } from './util.js';
+
 /** Give up after this many attempts and park the row for manual drain. */
 export const MAX_ATTEMPTS = 5;
 
@@ -201,6 +203,20 @@ export async function drainBugReports(env, { fetch: doFetch } = {}) {
     console.error('bugdrain: could not read queue', { message: err?.message });
     return { synced: 0, failed: 0, error: true };
   }
+  // NOT the same failure mode as poster.js / the token sweep, and worth being precise
+  // about: this query has no datetime() comparison, so 59bbbcc's lexicographic-string
+  // bug cannot occur here. Counting the same `status = 'pending'` predicate the query
+  // just ran would be tautological and detect nothing.
+  //
+  // What the denominator DOES buy here is backlog visibility, because the query is
+  // LIMIT-capped: `matched 5 of 5` is a drained queue, while `matched 5 of 91`, run
+  // after run, means reports arrive faster than BATCH drains them — a real failure
+  // that is otherwise invisible, since every individual run looks like a full success.
+  const pending = await countRows(
+    env,
+    `SELECT COUNT(*) AS n FROM bug_reports WHERE status = 'pending'`
+  );
+  console.log(`bugdrain: matched ${rows.length} of ${pending ?? '?'} pending report(s)`);
 
   let synced = 0;
   let failed = 0;
