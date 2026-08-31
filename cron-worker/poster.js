@@ -245,6 +245,13 @@ async function runDue(env, deps = {}) {
        LIMIT 10`
     ).all();
     duePosts = result.results || [];
+    // Log the matched-row count on EVERY run, not just on error. The 59bbbcc bug's
+    // signature was an ABSENCE of posts with no thrown error at all — the query ran
+    // "successfully" and just silently matched nothing, forever, for every real
+    // scheduled post. A success-path log with zero information content (or none at
+    // all) is exactly as blind to that failure mode as no log — retained logs are
+    // worthless if the one path that actually broke never says anything.
+    console.log(`Poster: due-post query matched ${duePosts.length} row(s)`);
   } catch (err) {
     console.error('Poster: failed to query due posts:', err);
     // Swallow it here (duePosts stays []) rather than rethrow — the caller

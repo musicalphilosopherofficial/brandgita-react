@@ -201,6 +201,11 @@ export async function drainBugReports(env, { fetch: doFetch } = {}) {
     console.error('bugdrain: could not read queue', { message: err?.message });
     return { synced: 0, failed: 0, error: true };
   }
+  // Same discipline as poster.js's due-post query and the token-refresh sweep: log
+  // the matched-row count on every run, not just when something was actually synced
+  // or failed — a genuinely empty queue and a query that's silently matching nothing
+  // it should are indistinguishable without this.
+  console.log(`bugdrain: matched ${rows.length} pending report(s)`);
 
   let synced = 0;
   let failed = 0;

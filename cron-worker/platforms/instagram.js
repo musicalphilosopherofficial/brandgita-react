@@ -292,6 +292,12 @@ export const instagram = Object.freeze({
          WHERE datetime(token_expiry) <= datetime('now', '+7 days')`
       ).all();
       rows = result.results || [];
+      // Same discipline as poster.js's due-post query: log the matched-row count on
+      // EVERY run. This exact query had the same lexicographic-string bug (see the
+      // comment above) and matched zero rows on every real run for months with no
+      // thrown error — a success-path log that says nothing is exactly as blind to
+      // that as no log at all.
+      console.log(`Token refresh: matched ${rows.length} token(s) due within 7 days`);
     } catch (err) {
       console.error('Token refresh: failed to query ig_tokens:', err);
       return;
