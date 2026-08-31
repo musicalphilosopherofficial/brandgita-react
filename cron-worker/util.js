@@ -40,3 +40,34 @@ export function mediaUrl(key, mediaBase = MEDIA_BASE) {
     .join('/');
   return `${mediaBase}/${encoded}`;
 }
+
+// ---------------------------------------------------------------------------
+// countRows — the DENOMINATOR for the cron's "matched X of Y" diagnostic logs.
+//
+// WHY THIS EXISTS. 59bbbcc was a query that silently matched zero rows on every
+// real run, forever, throwing nothing. Logging the matched count alone does not
+// detect that: "matched 0 row(s)" is emitted identically by a genuinely empty
+// queue and by a comparison that can never match. The two are only separable
+// with the size of the set the filter is selecting FROM — if 7 posts are
+// eligible and the due-filter matches 0 minute after minute, that is the bug,
+// visible in a log query instead of inferred by a human who already suspects it.
+//
+// Diagnostic ONLY. Never throws and never blocks work: a failed count returns
+// null (rendered '?') so the run proceeds. A denominator that could break
+// posting would be worse than the blindness it fixes.
+//
+// The count query must OMIT the filter under suspicion and keep the rest — for
+// the due-post sweep that means dropping the datetime() comparison while keeping
+// status/retry_count. Counting the same predicate the caller just ran is
+// tautological and detects nothing.
+export async function countRows(env, sql) {
+  try {
+    const row = await env.DB.prepare(sql).first();
+    const n = row?.n;
+    return Number.isInteger(n) ? n : null;
+  } catch (err) {
+    // External-I/O failure path — must log (scripts/check_diagnostic_logging.py).
+    console.error('countRows: diagnostic count failed', { message: err?.message });
+    return null;
+  }
+}

@@ -37,7 +37,7 @@
 // — confirmed empirically, not assumed. See cron-worker/util.js's header.
 
 import { encryptToken, decryptToken } from '../_crypto.js';
-import { mediaUrl, nowIso } from '../util.js';
+import { mediaUrl, nowIso, countRows } from '../util.js';
 
 const GRAPH_BASE = 'https://graph.instagram.com/v21.0';
 
@@ -292,12 +292,16 @@ export const instagram = Object.freeze({
          WHERE datetime(token_expiry) <= datetime('now', '+7 days')`
       ).all();
       rows = result.results || [];
-      // Same discipline as poster.js's due-post query: log the matched-row count on
-      // EVERY run. This exact query had the same lexicographic-string bug (see the
-      // comment above) and matched zero rows on every real run for months with no
-      // thrown error — a success-path log that says nothing is exactly as blind to
-      // that as no log at all.
-      console.log(`Token refresh: matched ${rows.length} token(s) due within 7 days`);
+      // Same discipline as poster.js's due-post query, denominator included. This
+      // query had the identical lexicographic-string bug (see the comment above) and
+      // matched zero rows on every real run for months without throwing. "matched 0"
+      // on its own is indistinguishable from "no token happens to be due"; against
+      // the total token count it is not — 0 of 12, every run, is the bug. IG tokens
+      // are 60-day, so with any real tokens stored some must come due over time.
+      const totalTokens = await countRows(env, `SELECT COUNT(*) AS n FROM ig_tokens`);
+      console.log(
+        `Token refresh: matched ${rows.length} of ${totalTokens ?? '?'} token(s) due within 7 days`
+      );
     } catch (err) {
       console.error('Token refresh: failed to query ig_tokens:', err);
       return;

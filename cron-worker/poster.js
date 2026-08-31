@@ -26,7 +26,7 @@
 import { drainBugReports } from './bugdrain.js';
 import { adapterFor, ADAPTERS } from './platforms/index.js';
 import { DEFAULT_PLATFORM, contractFor } from '../shared/platform-contracts.js';
-import { MEDIA_BASE } from './util.js';
+import { MEDIA_BASE, countRows } from './util.js';
 
 // Container processing poll configuration (reels are transcoded async by Meta).
 // Lives here rather than in platforms/instagram.js because processPost's own
@@ -245,13 +245,19 @@ async function runDue(env, deps = {}) {
        LIMIT 10`
     ).all();
     duePosts = result.results || [];
-    // Log the matched-row count on EVERY run, not just on error. The 59bbbcc bug's
-    // signature was an ABSENCE of posts with no thrown error at all — the query ran
-    // "successfully" and just silently matched nothing, forever, for every real
-    // scheduled post. A success-path log with zero information content (or none at
-    // all) is exactly as blind to that failure mode as no log — retained logs are
-    // worthless if the one path that actually broke never says anything.
-    console.log(`Poster: due-post query matched ${duePosts.length} row(s)`);
+    // Log matched-of-eligible on EVERY run, not just on error. 59bbbcc's signature was
+    // an ABSENCE of posts with no thrown error — the query ran "successfully" and
+    // matched nothing, forever. The matched count ALONE cannot see that: "matched 0"
+    // is what an empty queue looks like too. The denominator is the set the
+    // datetime() filter selects FROM (same status/retry_count predicates, no time
+    // comparison), so a persistent `matched 0 of 7` is the bug, unambiguously — and
+    // `matched 10 of 47` says the backlog exceeds what one LIMIT 10 run can drain.
+    const eligible = await countRows(
+      env,
+      `SELECT COUNT(*) AS n FROM scheduled_posts
+        WHERE status = 'scheduled' AND retry_count < 5`
+    );
+    console.log(`Poster: due-post query matched ${duePosts.length} of ${eligible ?? '?'} eligible row(s)`);
   } catch (err) {
     console.error('Poster: failed to query due posts:', err);
     // Swallow it here (duePosts stays []) rather than rethrow — the caller

@@ -27,6 +27,14 @@ function fakeDB(rows) {
         }),
         async all() { calls.push(['all', sql, []]); return { results: rows }; },
         async run() { calls.push(['run', sql, []]); return {}; },
+        // The un-bound path had no first() at all, so countRows()'s diagnostic
+        // denominator threw and was swallowed into '?' on every run. Serve the
+        // pending count from the same seed rows the drain query returns.
+        async first() {
+          calls.push(['first', sql, []]);
+          if (sql.includes('COUNT(*) AS n FROM bug_reports')) return { n: rows.length };
+          return null;
+        },
       };
     },
   };
