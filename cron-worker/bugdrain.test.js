@@ -86,6 +86,55 @@ test('a pending report is sent to both trackers and marked synced', async () => 
 });
 
 // ---------------------------------------------------------------------------
+// the Notion page actually populates the real Customer Support schema — not just Name.
+// bugdrain.js used to write Name and nothing else; a creator's report_id, membership,
+// type, and attachments existed in D1 but never reached anywhere a human could filter
+// or search on them in Notion. This pins that the fix actually sends them.
+// ---------------------------------------------------------------------------
+
+test('the Notion page carries Report ID / Type / Status / Membership / Attachments, not just Name', async () => {
+  const e = env();
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (url.includes('api.notion.com')) notionBody = JSON.parse(init.body);
+    return { ok: true, status: 200, json: async () => ({ html_url: 'u', id: 'p' }), text: async () => '' };
+  };
+
+  await drainBugReports(e, { fetch });
+
+  assert.ok(notionBody, 'Notion was never called');
+  const p = notionBody.properties;
+  assert.equal(p['Report ID'].rich_text[0].text.content, 'bg-abc123');
+  assert.equal(p.Type.select.name, 'bug');
+  assert.equal(p.Status.select.name, 'Open');
+  assert.equal(p.Membership.rich_text[0].text.content, 'mem_1');
+  // ROW's diagnostics carry no media key, so Attachments must be OMITTED, not sent as
+  // an empty multi_select — Notion accepts either, but an explicit [] would misread as
+  // "attachments were checked and there are none" rather than "not asked about here".
+  assert.equal('Attachments' in p, false);
+});
+
+test('a report WITH a screenshot sends Attachments as a select option, not free text', async () => {
+  const withShot = {
+    ...ROW,
+    payload: JSON.stringify({
+      untrusted_user_input: { summary: 'button is misaligned', transcript_raw: '' },
+      diagnostics: { screenshot_key: 'shots/abc.png' },
+    }),
+  };
+  const e = { ...env(), DB: fakeDB([withShot]) };
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (url.includes('api.notion.com')) notionBody = JSON.parse(init.body);
+    return { ok: true, status: 200, json: async () => ({ html_url: 'u', id: 'p' }), text: async () => '' };
+  };
+
+  await drainBugReports(e, { fetch });
+
+  assert.deepEqual(notionBody.properties.Attachments.multi_select, [{ name: 'Screenshot' }]);
+});
+
+// ---------------------------------------------------------------------------
 // attached recordings — referenced, never uploaded
 // ---------------------------------------------------------------------------
 

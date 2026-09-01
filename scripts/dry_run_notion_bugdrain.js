@@ -28,9 +28,19 @@ async function main() {
   }
 
   const env = { NOTION_TOKEN, NOTION_DB };
-  const row = { report_type: 'dry-run-test' };
+  // A REAL row shape, not a stub — report_type must be one of REPORT_TYPES
+  // (functions/api/bugreport.js) or it silently adds a new option to the database's
+  // Type select on every dry run instead of exercising the real schema. report_id /
+  // membership_id are included because createNotionPage now writes both as their own
+  // properties, not just into the page body.
+  const row = {
+    report_type: 'bug',
+    report_id: `bg-dryrun-${Date.now().toString(16)}`,
+    membership_id: 'dry-run-membership',
+  };
   const parsed = {
     summary: `VUAT-S001 dry run — ${new Date().toISOString()} — safe to delete this page.`,
+    diagnostics: { screenshot_key: 'dry-run/fake-screenshot.png' },
   };
 
   console.log('Calling the real Notion API with the real, unmodified createNotionPage()...');

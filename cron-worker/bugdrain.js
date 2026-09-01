@@ -182,6 +182,13 @@ async function createGithubIssue(env, doFetch, row, parsed) {
 // logic (which would drift) and without needing D1/GitHub bindings just to prove Notion
 // works.
 export async function createNotionPage(env, doFetch, row, parsed) {
+  // Attachments as select OPTIONS the database itself declares — a mismatched string
+  // in a multi_select silently gets added as a new option (Notion's default behaviour
+  // on an integration write) rather than rejected, so a typo here would quietly grow
+  // the schema instead of erroring. mediaAttachments()'s labels are already exactly
+  // MEDIA_REF_LABEL's values, which is what the database's options were created from.
+  const attachments = mediaAttachments(parsed.diagnostics).map(([label]) => ({ name: label }));
+
   const children = [
     {
       object: 'block',
@@ -234,6 +241,25 @@ export async function createNotionPage(env, doFetch, row, parsed) {
         Name: {
           title: [{ text: { content: `[${row.report_type}] ${String(parsed.summary || '').slice(0, 70)}` } }],
         },
+        // report_id is what the creator quotes to support — it must be searchable in
+        // Notion, not buried in the page body.
+        // row.report_id / membership_id are NOT NULL in production (bug_reports's own
+        // D1 schema, and this is the drain's own SELECT), but `|| ''` matches this
+        // file's existing defensiveness elsewhere — a Notion rich_text with an
+        // undefined content is dropped from the JSON body entirely, not sent as "",
+        // which the API would reject outright.
+        'Report ID': { rich_text: [{ text: { content: row.report_id || '' } }] },
+        // A validation-shaped value, not creator input — REPORT_TYPES in
+        // functions/api/bugreport.js already rejects anything outside bug /
+        // complaint / feature_request at ingestion, so this cannot drift from the
+        // select's own options.
+        Type: { select: { name: row.report_type } },
+        // Every report a drain files starts triage-pending. The database also defines
+        // 'In Progress' / 'Resolved' / "Won't Fix", which nothing here ever sets —
+        // those are human-only transitions made in Notion, not states the drain drives.
+        Status: { select: { name: 'Open' } },
+        Membership: { rich_text: [{ text: { content: row.membership_id || '' } }] },
+        ...(attachments.length ? { Attachments: { multi_select: attachments } } : {}),
       },
       children,
     }),
