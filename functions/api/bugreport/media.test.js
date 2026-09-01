@@ -330,6 +330,18 @@ test('an authenticated response is never cacheable and never CORS-readable', asy
   assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff');
 });
 
+test('ERROR responses are not CORS-readable either, not just the 200', async () => {
+  // The inconsistency is the bug: error bodies distinguish "wrong licence" from "not
+  // found", which is exactly the probing signal not to hand to a page on another origin.
+  const env = makeEnv();
+  const key = await uploadThenKey(env);
+  for (const licence of [null, 'B-NOPE', OTHER_LICENCE]) {
+    const res = await fetchMedia({ request: getReq({ licence }), env, params: { key: encodeURIComponent(key) } });
+    assert.ok(res.status >= 400);
+    assert.equal(res.headers.get('Access-Control-Allow-Origin'), null, `leaked CORS on ${licence}`);
+  }
+});
+
 test('POST is not allowed on the fetch route', async () => {
   const res = await fetchMedia({ request: getReq({ method: 'POST' }), env: makeEnv(), params: { key: 'x' } });
   assert.equal(res.status, 405);

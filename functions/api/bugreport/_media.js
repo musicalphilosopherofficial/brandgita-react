@@ -35,7 +35,7 @@
  *
  * WHY THE MEMBERSHIP IS IN THE KEY
  * --------------------------------
- * `bugreport/{membershipSlug}/{YYYYMMDD}-{32 hex}.webm`.
+ * `bugreport/{membershipSlug}/{kind}/{YYYYMMDD}-{32 hex}.webm`.
  *
  * The slug is an HMAC of the membership id — the same construction and the same
  * reasoning as `mediaSlug` in ../_auth.js, one secret apart. It buys two things that
@@ -46,7 +46,9 @@
  *             cannot read another creator's recording — "authenticated" alone would not
  *             have prevented that, and it is the more likely real-world mistake.
  *   QUOTA.    Today's uploads are countable with one R2 list() against
- *             `bugreport/{slug}/{YYYYMMDD}-`, so the daily cap needs no counter table.
+ *             `bugreport/{slug}/{kind}/{YYYYMMDD}-`, so the daily cap needs no counter
+             table — and it is per-kind, so a burst of screenshots cannot exhaust the
+             allowance for the recording that actually shows the bug.
  *
  * The slug is not reversible and never needs to be: every call already knows the
  * membership from the licence check.

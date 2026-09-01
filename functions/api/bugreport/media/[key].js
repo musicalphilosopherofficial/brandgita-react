@@ -31,10 +31,20 @@
 import { checkWhopLicense } from '../../_whop.js';
 import { bugMediaSlug, isBugMediaKey, MEDIA_PREFIX } from '../_media.js';
 
+// NO Access-Control-Allow-Origin, and no allowed-headers list, on ANY response from this
+// route — success or error. The sibling public route sets `*` because Instagram and
+// browsers fetch it cross-origin by design; here that would invite a page on any origin
+// to read an authenticated response.
+//
+// Dropping the preflight headers is the point rather than an oversight: without them a
+// browser cannot send X-License-Key cross-origin at all, so there is no cross-origin way
+// to reach this route. The desktop client is not a browser context and never needed CORS.
+//
+// An earlier version set `*` on the error responses while omitting it from the 200 — the
+// inconsistency was the bug (CodeRabbit, this PR): error bodies distinguish "wrong
+// licence" from "not found", which is exactly the probing signal not to hand out.
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'X-License-Key',
 };
 
 function json(data, status = 200) {
@@ -114,10 +124,7 @@ export async function onRequest(context) {
       // load-bearing here in a way it is not on the public route, where the same header
       // is about data residency rather than about auth.
       'Cache-Control': 'private, no-store',
-      // No Access-Control-Allow-Origin. The public route sets `*` because Instagram and
-      // browsers fetch it cross-origin by design; echoing it here would invite a page on
-      // any origin to read an authenticated response. The desktop client is not a
-      // browser context and does not need CORS to fetch this.
+      // No Access-Control-Allow-Origin — see the CORS note at the top of this file.
       Vary: 'X-License-Key',
     },
   });
