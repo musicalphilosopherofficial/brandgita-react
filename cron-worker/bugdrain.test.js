@@ -135,6 +135,195 @@ test('a report WITH a screenshot sends Attachments as a select option, not free 
 });
 
 // ---------------------------------------------------------------------------
+// screenshots embed inline in Notion — the one exception to reference-only media.
+// Recordings and voice notes are unaffected by any of this: still key-only, still no
+// R2 bytes ever handed to Notion for those two kinds.
+// ---------------------------------------------------------------------------
+
+function fakeR2Bucket(bytes) {
+  return {
+    async get() {
+      if (!bytes) return null;
+      return {
+        size: bytes.length,
+        async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length); },
+      };
+    },
+  };
+}
+
+function withShotRow(key = 'shots/abc.png') {
+  return {
+    ...ROW,
+    payload: JSON.stringify({
+      untrusted_user_input: { summary: 'button is misaligned', transcript_raw: '' },
+      diagnostics: { screenshot_key: key },
+    }),
+  };
+}
+
+test('a screenshot with R2 bytes available is embedded as a real image block, not just cited', async () => {
+  const e = { ...env(), DB: fakeDB([withShotRow()]), SCHEDULE_BUCKET: fakeR2Bucket(new Uint8Array([1, 2, 3])) };
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (url === 'https://api.notion.com/v1/file_uploads') {
+      return { ok: true, status: 200, json: async () => ({ id: 'file-upload-1' }), text: async () => '' };
+    }
+    if (String(url).includes('/file_uploads/file-upload-1/send')) {
+      return { ok: true, status: 200, json: async () => ({ id: 'file-upload-1', status: 'uploaded' }), text: async () => '' };
+    }
+    if (url === 'https://api.notion.com/v1/pages') {
+      notionBody = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ id: 'p' }), text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({ html_url: 'u' }), text: async () => '' };
+  };
+
+  const res = await drainBugReports(e, { fetch });
+
+  assert.equal(res.synced, 1);
+  const image = notionBody.children.find((c) => c.type === 'image');
+  assert.ok(image, 'no image block in the Notion page');
+  assert.equal(image.image.type, 'file_upload');
+  assert.equal(image.image.file_upload.id, 'file-upload-1');
+  // The embed succeeded, so the reference-only paragraph for THIS key must not also
+  // appear — a page with both would look like the embed silently failed.
+  const refLine = notionBody.children.find(
+    (c) => c.type === 'paragraph' && c.paragraph.rich_text[0].text.content.startsWith('Screenshot: '),
+  );
+  assert.equal(refLine, undefined, 'reference paragraph should not duplicate a successful embed');
+});
+
+test('an oversized screenshot falls back to the reference-only paragraph, never thrown', async () => {
+  const oversized = new Uint8Array(20 * 1024 * 1024); // over the 19MB single-part ceiling
+  const e = { ...env(), DB: fakeDB([withShotRow()]), SCHEDULE_BUCKET: fakeR2Bucket(oversized) };
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (String(url).includes('file_uploads')) {
+      // A call here means the size guard didn't short-circuit before ever asking Notion.
+      return { ok: false, status: 500, json: async () => ({}), text: async () => 'should not be called' };
+    }
+    if (url === 'https://api.notion.com/v1/pages') {
+      notionBody = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ id: 'p' }), text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({ html_url: 'u' }), text: async () => '' };
+  };
+
+  const res = await drainBugReports(e, { fetch });
+
+  assert.equal(res.synced, 1, 'an embed that cannot proceed must not fail the whole report');
+  assert.equal(notionBody.children.some((c) => c.type === 'image'), false);
+  const refLine = notionBody.children.find(
+    (c) => c.type === 'paragraph' && c.paragraph.rich_text[0].text.content.startsWith('Screenshot: '),
+  );
+  assert.ok(refLine, 'oversized screenshot must still be findable by its key');
+});
+
+test('a Notion file-upload rejection falls back to reference-only rather than losing the report', async () => {
+  const e = { ...env(), DB: fakeDB([withShotRow()]), SCHEDULE_BUCKET: fakeR2Bucket(new Uint8Array([1, 2, 3])) };
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (url === 'https://api.notion.com/v1/file_uploads') {
+      return { ok: false, status: 400, json: async () => ({}), text: async () => 'bad request' };
+    }
+    if (url === 'https://api.notion.com/v1/pages') {
+      notionBody = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ id: 'p' }), text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({ html_url: 'u' }), text: async () => '' };
+  };
+
+  const res = await drainBugReports(e, { fetch });
+
+  assert.equal(res.synced, 1);
+  assert.equal(notionBody.children.some((c) => c.type === 'image'), false);
+  assert.ok(
+    notionBody.children.some(
+      (c) => c.type === 'paragraph' && c.paragraph.rich_text[0].text.content.startsWith('Screenshot: '),
+    ),
+  );
+});
+
+test('with no R2 binding at all (e.g. the founder\'s local dry-run script), screenshots stay reference-only', async () => {
+  const e = { ...env(), DB: fakeDB([withShotRow()]) }; // no SCHEDULE_BUCKET
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (url === 'https://api.notion.com/v1/pages') {
+      notionBody = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ id: 'p' }), text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({ html_url: 'u' }), text: async () => '' };
+  };
+
+  await drainBugReports(e, { fetch });
+
+  assert.equal(notionBody.children.some((c) => c.type === 'image'), false);
+});
+
+test('a recording and a voice note are never sent through the Notion file-upload path', async () => {
+  const withMedia = {
+    ...ROW,
+    payload: JSON.stringify({
+      untrusted_user_input: { summary: 'audio popped', transcript_raw: '' },
+      diagnostics: { media_key: MEDIA_KEY, voice_key: VOICE_KEY },
+    }),
+  };
+  const e = { ...env(), DB: fakeDB([withMedia]), SCHEDULE_BUCKET: fakeR2Bucket(new Uint8Array([1, 2, 3])) };
+  let fileUploadCalled = false;
+  const fetch = async (url) => {
+    if (String(url).includes('file_uploads')) fileUploadCalled = true;
+    return { ok: true, status: 200, json: async () => ({ html_url: 'u', id: 'p' }), text: async () => '' };
+  };
+
+  await drainBugReports(e, { fetch });
+
+  assert.equal(fileUploadCalled, false, 'recording/voice must never trigger a Notion file upload');
+});
+
+// ---------------------------------------------------------------------------
+// GitHub Issue property — links the Notion page back to its matching issue
+// ---------------------------------------------------------------------------
+
+test('the GitHub Issue property links to the real issue URL when GitHub is configured', async () => {
+  const e = env();
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (url.includes('api.github.com')) {
+      return { ok: true, status: 200, json: async () => ({ html_url: 'https://github.com/musicalphilosopherofficial/BrandGita/issues/109' }), text: async () => '' };
+    }
+    if (url === 'https://api.notion.com/v1/pages') {
+      notionBody = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ id: 'p' }), text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+  };
+
+  await drainBugReports(e, { fetch });
+
+  assert.equal(
+    notionBody.properties['GitHub Issue'].url,
+    'https://github.com/musicalphilosopherofficial/BrandGita/issues/109',
+  );
+});
+
+test('the GitHub Issue property is omitted when GitHub is not configured', async () => {
+  const e = env({ GITHUB_TOKEN: undefined, GITHUB_REPO: undefined });
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (url === 'https://api.notion.com/v1/pages') {
+      notionBody = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ id: 'p' }), text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+  };
+
+  await drainBugReports(e, { fetch });
+
+  assert.equal('GitHub Issue' in notionBody.properties, false);
+});
+
+// ---------------------------------------------------------------------------
 // attached recordings — referenced, never uploaded
 // ---------------------------------------------------------------------------
 
