@@ -1,10 +1,20 @@
-# Standalone Cron Worker — Instagram scheduled poster.
+# Standalone Cron Worker — Instagram scheduled poster + bug-report drain.
 #
 # Cloudflare PAGES does not support cron triggers. The poster therefore runs as
 # its own Worker, deployed separately from the Pages site, sharing the same D1
 # database (bound by database_id). It reads the scheduled_posts queue and calls
-# the Instagram Graph API. Media assets are fetched by Meta from the Pages site's
-# public /api/media/{key} endpoint, so this Worker needs no R2 binding.
+# the Instagram Graph API. Scheduled-post media is fetched by Meta from the
+# Pages site's public /api/media/{key} endpoint, so THAT flow needs no R2
+# binding here.
+#
+# The R2 binding below is for a different, narrower purpose: bugdrain.js reads
+# a bug report's screenshot bytes directly from R2 so it can embed the image
+# inline in the Notion page (screenshots only — recordings and voice notes stay
+# reference-only, see bugdrain.js's own comment on why). Same bucket the
+# licence-gated /api/bugreport/media/{key} route serves from
+# (functions/api/bugreport/media.js's SCHEDULE_BUCKET) — this Worker gets
+# direct binding access instead of an HTTP round-trip because it isn't a
+# creator and has no licence to present to that route.
 #
 # Deploy from this directory:
 #   cd cron-worker && npx wrangler deploy
@@ -19,6 +29,10 @@ compatibility_date = "2024-09-01"
 binding = "DB"
 database_name = "brandgita-waitlist"
 database_id = "c0c56a08-861b-402b-813d-cd8734e8977a"
+
+[[r2_buckets]]
+binding = "SCHEDULE_BUCKET"
+bucket_name = "brandgita-scheduled"
 
 [triggers]
 crons = ["* * * * *"]
