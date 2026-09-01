@@ -9,7 +9,12 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import nodeCrypto from 'node:crypto';
 import { onRequest } from './bugreport.js';
+import { bugMediaSlug } from './bugreport/_media.js';
+
+// mediaSlug/bugMediaSlug use WebCrypto's subtle, which is not a Node global before 20.
+if (!globalThis.crypto) globalThis.crypto = nodeCrypto.webcrypto;
 
 // ---------------------------------------------------------------------------
 // harness
@@ -39,7 +44,7 @@ const okWhop = async () => ({ ok: true, membershipId: 'mem_123', status: 'active
 
 function ctx(body, { db = fakeDB(), whop = okWhop, method = 'POST' } = {}) {
   return {
-    env: { DB: db, WHOP_COMPANY_API: 'k', __checkWhopLicense: whop },
+    env: { DB: db, WHOP_COMPANY_API: 'k', API_SECRET: 'test-secret', __checkWhopLicense: whop },
     request: {
       method,
       headers: { get: () => null },
@@ -217,6 +222,103 @@ test('malformed JSON is rejected without throwing', async () => {
   const c = ctx(GOOD);
   c.request.json = async () => { throw new Error('bad json'); };
   const res = await onRequest(c);
+  assert.equal(res.status, 400);
+});
+
+// ---------------------------------------------------------------------------
+// attached recording — a REFERENCE, and it must be the reporter's own
+// ---------------------------------------------------------------------------
+
+const ENV_FOR_SLUG = { API_SECRET: 'test-secret' };
+const keyFor = async (membershipId, kind = 'recording', ext = 'webm') =>
+  `bugreport/${await bugMediaSlug(ENV_FOR_SLUG, membershipId)}/${kind}/20260101-${'a'.repeat(32)}.${ext}`;
+
+test('a report citing the reporter’s own recording key is accepted', async () => {
+  const res = await onRequest(
+    ctx({ ...GOOD, diagnostics: { ...GOOD.diagnostics, media_key: await keyFor('mem_123') } }),
+  );
+  assert.equal(res.status, 200);
+});
+
+test('a malformed media_key is rejected — the reference has a shape', async () => {
+  const res = await onRequest(ctx({ ...GOOD, diagnostics: { ...GOOD.diagnostics, media_key: 'anything' } }));
+  assert.equal(res.status, 400);
+});
+
+test("a report citing ANOTHER licence's recording is rejected and nothing is written", async () => {
+  // GET /api/bugreport/media/{key} authorises against the licence presenting the key, so
+  // an unchecked reference here would be a way to have your own report hand you someone
+  // else's recording. The report is where that has to be caught.
+  let wrote = false;
+  const db = fakeDB({ onInsert: () => { wrote = true; } });
+  const res = await onRequest(
+    ctx({ ...GOOD, diagnostics: { ...GOOD.diagnostics, media_key: await keyFor('mem_OTHER') } }, { db }),
+  );
+  assert.equal(res.status, 403);
+  assert.equal(wrote, false);
+});
+
+test('the media reference is stored so the drain can cite it', async () => {
+  let row = null;
+  const db = fakeDB({ onInsert: (args) => { row = args; } });
+  const key = await keyFor('mem_123');
+  await onRequest(ctx({ ...GOOD, diagnostics: { ...GOOD.diagnostics, media_key: key } }, { db }));
+  assert.match(JSON.stringify(row), new RegExp(key.replace(/\//g, '\\\\?/')));
+});
+
+test('a report with no attachments is unaffected — media is optional', async () => {
+  const res = await onRequest(ctx(GOOD));
+  assert.equal(res.status, 200);
+});
+
+test('a screenshot and a voice note are validated exactly like a recording', async () => {
+  for (const [field, kind, ext] of [
+    ['screenshot_key', 'screenshot', 'png'],
+    ['voice_key', 'voice', 'ogg'],
+  ]) {
+    const own = await onRequest(
+      ctx({ ...GOOD, diagnostics: { ...GOOD.diagnostics, [field]: await keyFor('mem_123', kind, ext) } }),
+    );
+    assert.equal(own.status, 200, `${field} from the reporter should be accepted`);
+
+    const theirs = await onRequest(
+      ctx({ ...GOOD, diagnostics: { ...GOOD.diagnostics, [field]: await keyFor('mem_OTHER', kind, ext) } }),
+    );
+    assert.equal(theirs.status, 403, `${field} from another licence must be refused`);
+  }
+});
+
+test('a key in the WRONG field is refused — the kind must match the field', async () => {
+  // Otherwise the creator previews a screenshot and the ticket says "voice note", or a
+  // client bug silently sends something other than what was played back.
+  const res = await onRequest(
+    ctx({ ...GOOD, diagnostics: { ...GOOD.diagnostics, voice_key: await keyFor('mem_123') } }),
+  );
+  assert.equal(res.status, 400);
+});
+
+test('a key whose kind and extension disagree is refused', async () => {
+  const res = await onRequest(
+    ctx({ ...GOOD, diagnostics: { ...GOOD.diagnostics, voice_key: await keyFor('mem_123', 'voice', 'png') } }),
+  );
+  assert.equal(res.status, 400);
+});
+
+test('a VOICE-ONLY report is accepted — speaking replaces typing', async () => {
+  // Founder, 2026-09-01: voice notes are an alternative to typing, not a garnish on it.
+  const res = await onRequest(
+    ctx({
+      ...GOOD,
+      summary: '',
+      transcript_raw: '',
+      diagnostics: { ...GOOD.diagnostics, voice_key: await keyFor('mem_123', 'voice', 'ogg') },
+    }),
+  );
+  assert.equal(res.status, 200);
+});
+
+test('a report with neither text NOR voice is still rejected as empty', async () => {
+  const res = await onRequest(ctx({ ...GOOD, summary: '  ', transcript_raw: '' }));
   assert.equal(res.status, 400);
 });
 
