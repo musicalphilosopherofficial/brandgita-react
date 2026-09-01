@@ -405,6 +405,69 @@ test('a media_key cannot break out of its inline code span', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// guided fields — Steps to reproduce / Expected, same fencing as summary
+// ---------------------------------------------------------------------------
+
+test('Steps to reproduce and Expected render as their own fenced, untrusted sections when present', async () => {
+  const body = buildIssueBody({
+    report_id: 'bg-1',
+    report_type: 'bug',
+    summary: 'export button does nothing',
+    steps_to_reproduce: '1. Open Settings 2. Click Export',
+    expected: 'a file should download',
+    diagnostics: {},
+  });
+
+  assert.match(body, /### Steps to reproduce/);
+  assert.match(body, /### What they expected instead/);
+  assert.ok(body.includes('1. Open Settings 2. Click Export'));
+  assert.ok(body.includes('a file should download'));
+});
+
+test('Steps to reproduce and Expected are omitted entirely when the creator left them blank', async () => {
+  const body = buildIssueBody({
+    report_id: 'bg-1',
+    report_type: 'bug',
+    summary: 'export button does nothing',
+    diagnostics: {},
+  });
+
+  assert.equal(/### Steps to reproduce/.test(body), false);
+  assert.equal(/### What they expected instead/.test(body), false);
+});
+
+test('the Notion page renders Steps to reproduce and Expected as their own blocks when present', async () => {
+  const e = env();
+  const withGuided = {
+    ...ROW,
+    payload: JSON.stringify({
+      untrusted_user_input: {
+        summary: 'export button does nothing',
+        steps_to_reproduce: '1. Open Settings 2. Click Export',
+        expected: 'a file should download',
+      },
+      diagnostics: {},
+    }),
+  };
+  const eGuided = { ...e, DB: fakeDB([withGuided]) };
+  let notionBody = null;
+  const fetch = async (url, init) => {
+    if (url === 'https://api.notion.com/v1/pages') {
+      notionBody = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ id: 'p' }), text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({ html_url: 'u' }), text: async () => '' };
+  };
+
+  await drainBugReports(eGuided, { fetch });
+
+  const headings = notionBody.children
+    .filter((c) => c.type === 'heading_3')
+    .map((c) => c.heading_3.rich_text[0].text.content);
+  assert.deepEqual(headings, ['Steps to reproduce', 'What they expected instead']);
+});
+
+// ---------------------------------------------------------------------------
 // prompt-injection containment — the reason the payload is fenced at rest
 // ---------------------------------------------------------------------------
 

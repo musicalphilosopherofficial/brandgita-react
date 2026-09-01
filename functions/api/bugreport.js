@@ -126,7 +126,7 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Invalid JSON' }, 400);
   }
 
-  const { license_key, report_type, summary, transcript_raw, diagnostics } = body || {};
+  const { license_key, report_type, summary, transcript_raw, steps_to_reproduce, expected, diagnostics } = body || {};
 
   // ── shape validation, before any I/O ──────────────────────────────────────
   if (!license_key || typeof license_key !== 'string') {
@@ -141,6 +141,12 @@ export async function onRequest(context) {
 
   const text = String(summary ?? '').trim();
   const raw = String(transcript_raw ?? '').trim();
+  // Guided fields (founder, 2026-09-01): "what happened" is the one required field —
+  // the app asks for this shape at submission time so a report already reads like the
+  // format triage uses, rather than needing to be reshaped after the fact. Both are
+  // genuinely optional: a creator who cannot state exact steps still has a real bug.
+  const steps = String(steps_to_reproduce ?? '').trim();
+  const exp = String(expected ?? '').trim();
   // A voice note is an ALTERNATIVE to typing, not a garnish on it (founder, 2026-09-01).
   // A creator who is mid-bug and frustrated should be able to say what happened instead
   // of composing a paragraph, so a report carrying audio is not empty even with no text.
@@ -150,13 +156,14 @@ export async function onRequest(context) {
   if (!text && !raw && !hasVoice) {
     return json({ ok: false, error: 'Report is empty — nothing to act on' }, 400);
   }
-  if (text.length > MAX_TEXT || raw.length > MAX_TEXT) {
+  if (text.length > MAX_TEXT || raw.length > MAX_TEXT || steps.length > MAX_TEXT || exp.length > MAX_TEXT) {
     return json({ ok: false, error: `Text exceeds ${MAX_TEXT} characters` }, 413);
   }
 
   // ── credential scan, before persistence and before the licence round trip ──
   // Cheap, and refusing early means a leaked key never touches storage at all.
-  if (containsSecret(text) || containsSecret(raw) || containsSecret(diagnostics)) {
+  // steps/expected are creator free text too, same trust class as summary.
+  if (containsSecret(text) || containsSecret(raw) || containsSecret(steps) || containsSecret(exp) || containsSecret(diagnostics)) {
     return json(
       {
         ok: false,
@@ -241,7 +248,7 @@ export async function onRequest(context) {
   // future automated triage. Mark it as data at rest so every downstream reader — human
   // or model — sees the boundary rather than having to infer it.
   const payload = JSON.stringify({
-    untrusted_user_input: { summary: text, transcript_raw: raw },
+    untrusted_user_input: { summary: text, transcript_raw: raw, steps_to_reproduce: steps, expected: exp },
     diagnostics: diagnostics ?? {},
   });
 
