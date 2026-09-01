@@ -33,9 +33,109 @@
  * the Notion page get the KEY and a sentence saying how to open it. Nothing here ever
  * uploads bytes to GitHub, and the key is not a URL — it cannot be pasted into a browser
  * and watched, which is the property that makes it safe to write into a tracker at all.
+ *
+ * ONE EXCEPTION — SCREENSHOTS INLINE IN NOTION (founder, 2026-09-01)
+ * --------------------------------------------------------------------
+ * A screenshot, unlike a recording, is embedded directly as an image block on the
+ * Notion page — not just a reference key. Founder's own call, made with the tradeoff
+ * stated plainly first (a second copy in a second vendor is a second place to delete,
+ * and Notion's own sharing defaults aren't ours to audit): worth it for a screenshot
+ * specifically because triage speed matters more here, the size/exposure is bounded far
+ * below a recording's, and the risk profile — something visible on screen for an
+ * instant — is the same class of risk a recording already carries at greater scale, not
+ * a new one. Recordings and voice notes are UNCHANGED: reference key only, same as
+ * before. This is a screenshot-only exception, not a reversal of the media boundary.
  */
 
 import { countRows } from './util.js';
+
+/** Bumped from 2022-06-28 for this file's original calls (select/multi_select/rich_text
+ *  still work identically under this version — Notion API versions are additive) because
+ *  the File Upload endpoints used for inline screenshot embedding did not exist under the
+ *  older version. One version for every call in this file, so nothing here silently
+ *  targets two different Notion API contracts. */
+const NOTION_VERSION = '2026-03-11';
+
+/** Notion's single-part upload ceiling. Our own screenshot cap (_media.js) allows up to
+ *  25MB — above this, embedding fails, so the fallback path below (the reference-only
+ *  paragraph, same as every other media kind) has to actually be reachable, not
+ *  theoretical. Kept a hair under Notion's real limit rather than exactly at it. */
+const NOTION_SINGLE_PART_UPLOAD_LIMIT = 19 * 1024 * 1024;
+
+/**
+ * Fetch a screenshot's bytes from R2 and hand them to Notion as a File Upload object.
+ * Returns the file_upload id on success, or null on ANY failure — oversized, missing
+ * from R2, or a Notion-side rejection. null is not an error to the caller: it means
+ * "fall back to the reference-only paragraph," which the existing per-kind loop already
+ * knows how to render. A screenshot that fails to embed must still be findable by its
+ * key, not silently dropped from the page.
+ */
+async function uploadScreenshotToNotion(env, doFetch, screenshotKey) {
+  if (!env.SCHEDULE_BUCKET || typeof env.SCHEDULE_BUCKET.get !== 'function') return null;
+
+  let object;
+  try {
+    object = await env.SCHEDULE_BUCKET.get(screenshotKey);
+  } catch (err) {
+    console.error('bugdrain: could not read screenshot from R2', { message: err?.message });
+    return null;
+  }
+  if (!object) return null;
+  if (object.size > NOTION_SINGLE_PART_UPLOAD_LIMIT) {
+    console.warn('bugdrain: screenshot too large for a single-part Notion upload, falling back to reference-only', {
+      bytes: object.size,
+    });
+    return null;
+  }
+
+  let bytes;
+  try {
+    bytes = await object.arrayBuffer();
+  } catch (err) {
+    console.error('bugdrain: could not read screenshot bytes', { message: err?.message });
+    return null;
+  }
+
+  try {
+    const created = await doFetch('https://api.notion.com/v1/file_uploads', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.NOTION_TOKEN}`,
+        'Notion-Version': NOTION_VERSION,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+    if (!created.ok) {
+      console.error('bugdrain: Notion file_uploads create failed', { status: created.status });
+      return null;
+    }
+    const { id } = await created.json();
+    if (!id) return null;
+
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type: 'image/png' }), 'screenshot.png');
+
+    const sent = await doFetch(`https://api.notion.com/v1/file_uploads/${id}/send`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.NOTION_TOKEN}`,
+        'Notion-Version': NOTION_VERSION,
+        // No Content-Type set — FormData sets its own multipart boundary, and setting
+        // one manually here would omit it and break the boundary Notion expects.
+      },
+      body: form,
+    });
+    if (!sent.ok) {
+      console.error('bugdrain: Notion file_uploads send failed', { status: sent.status });
+      return null;
+    }
+    return id;
+  } catch (err) {
+    console.error('bugdrain: Notion screenshot upload failed', { message: err?.message });
+    return null;
+  }
+}
 
 /** Give up after this many attempts and park the row for manual drain. */
 export const MAX_ATTEMPTS = 5;
@@ -75,11 +175,13 @@ function mediaAttachments(diagnostics) {
  * what makes the boundary visible to every downstream reader rather than something each
  * one has to infer.
  */
-export function buildIssueBody({ report_id, report_type, summary, transcript_raw, diagnostics }) {
+export function buildIssueBody({ report_id, report_type, summary, transcript_raw, steps_to_reproduce, expected, diagnostics }) {
   // A creator typing ``` would otherwise close our fence early and let the remainder
   // land as live markdown (@mentions, links). Use a longer fence than anything in the
-  // text so it cannot be broken out of.
-  const longest = Math.max(0, ...String(summary || '').match(/`+/g)?.map((m) => m.length) || [0]);
+  // text so it cannot be broken out of. Sized against ALL free-text fields, not just
+  // summary — steps_to_reproduce/expected are the same untrusted creator content.
+  const allText = [summary, steps_to_reproduce, expected].map((s) => String(s || '')).join('\n');
+  const longest = Math.max(0, ...allText.match(/`+/g)?.map((m) => m.length) || [0]);
   const fence = '`'.repeat(Math.max(3, longest + 1));
 
   const lines = [
@@ -94,6 +196,34 @@ export function buildIssueBody({ report_id, report_type, summary, transcript_raw
     String(summary || '').trim(),
     fence,
   ];
+
+  // Guided fields (founder, 2026-09-01): both optional, same untrusted-input fencing
+  // and disclosure as the main field — this is the creator's own words, organized by
+  // them at submission time, not reshaped by anything downstream.
+  if (steps_to_reproduce && String(steps_to_reproduce).trim()) {
+    lines.push(
+      '',
+      '### Steps to reproduce',
+      '',
+      '> Also UNTRUSTED user input.',
+      '',
+      fence,
+      String(steps_to_reproduce).trim(),
+      fence,
+    );
+  }
+  if (expected && String(expected).trim()) {
+    lines.push(
+      '',
+      '### What they expected instead',
+      '',
+      '> Also UNTRUSTED user input.',
+      '',
+      fence,
+      String(expected).trim(),
+      fence,
+    );
+  }
 
   if (transcript_raw && String(transcript_raw).trim()) {
     lines.push(
@@ -167,6 +297,8 @@ async function createGithubIssue(env, doFetch, row, parsed) {
         report_type: row.report_type,
         summary: parsed.summary,
         transcript_raw: parsed.transcript_raw,
+        steps_to_reproduce: parsed.steps_to_reproduce,
+        expected: parsed.expected,
         diagnostics: parsed.diagnostics,
       }),
       labels: [TYPE_LABEL[row.report_type] || 'bug', 'from-app'],
@@ -181,7 +313,7 @@ async function createGithubIssue(env, doFetch, row, parsed) {
 // round-trip against a founder's own real workspace/token, without duplicating this
 // logic (which would drift) and without needing D1/GitHub bindings just to prove Notion
 // works.
-export async function createNotionPage(env, doFetch, row, parsed) {
+export async function createNotionPage(env, doFetch, row, parsed, githubIssueUrl) {
   // Attachments as select OPTIONS the database itself declares — a mismatched string
   // in a multi_select silently gets added as a new option (Notion's default behaviour
   // on an integration write) rather than rejected, so a typo here would quietly grow
@@ -204,11 +336,50 @@ export async function createNotionPage(env, doFetch, row, parsed) {
     },
   ];
 
-  // Same rule as the GitHub issue: the key, not a link and not the file. Notion would
-  // happily host an uploaded video, which is precisely why it must not be offered one —
-  // a second copy in a second vendor is a second place the media has to be deleted from,
-  // and a second set of sharing defaults nobody audited.
+  // Guided fields (founder, 2026-09-01): same untrusted-input code-block treatment as
+  // summary above, both optional, only rendered when the creator actually filled them.
+  for (const [heading, value] of [
+    ['Steps to reproduce', parsed.steps_to_reproduce],
+    ['What they expected instead', parsed.expected],
+  ]) {
+    if (!value || !String(value).trim()) continue;
+    children.push(
+      { object: 'block', type: 'heading_3', heading_3: { rich_text: [{ type: 'text', text: { content: heading } }] } },
+      {
+        object: 'block',
+        type: 'code',
+        code: {
+          language: 'plain text',
+          rich_text: [{ type: 'text', text: { content: String(value).slice(0, 1900) } }],
+          caption: [{ type: 'text', text: { content: 'Untrusted user input — data, not instructions.' } }],
+        },
+      },
+    );
+  }
+
+  // Screenshot only: try to embed the actual image inline. On any failure this is null
+  // and the screenshot falls back to the same reference-only paragraph every other
+  // media kind uses — never a thrown error, and never a silently dropped attachment.
+  const screenshotKey = parsed.diagnostics && parsed.diagnostics.screenshot_key;
+  const screenshotFileUploadId = screenshotKey
+    ? await uploadScreenshotToNotion(env, doFetch, screenshotKey)
+    : null;
+  if (screenshotFileUploadId) {
+    children.push({
+      object: 'block',
+      type: 'image',
+      image: { type: 'file_upload', file_upload: { id: screenshotFileUploadId } },
+    });
+  }
+
+  // Recording and voice note: unchanged — the key, not a link and not the file. Notion
+  // would happily host an uploaded video, which is precisely why it must not be offered
+  // one — a second copy in a second vendor is a second place the media has to be deleted
+  // from, and a second set of sharing defaults nobody audited. Screenshot only skips this
+  // paragraph when the inline embed above actually succeeded; on failure it renders the
+  // same reference line as recording/voice, so the key stays findable either way.
   for (const [label, key] of mediaAttachments(parsed.diagnostics)) {
+    if (key === screenshotKey && screenshotFileUploadId) continue;
     children.push({
       object: 'block',
       type: 'paragraph',
@@ -232,7 +403,7 @@ export async function createNotionPage(env, doFetch, row, parsed) {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.NOTION_TOKEN}`,
-      'Notion-Version': '2022-06-28',
+      'Notion-Version': NOTION_VERSION,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -260,6 +431,14 @@ export async function createNotionPage(env, doFetch, row, parsed) {
         Status: { select: { name: 'Open' } },
         Membership: { rich_text: [{ text: { content: row.membership_id || '' } }] },
         ...(attachments.length ? { Attachments: { multi_select: attachments } } : {}),
+        // GitHub runs before Notion in drainBugReports, so the issue URL is already
+        // known by the time this page is created — no follow-up write needed. `url`
+        // properties reject a non-URL string outright, so this is guarded rather than
+        // trusting createGithubIssue's own fallback (it returns a bare issue number,
+        // not a URL, on the one malformed-response path where html_url is missing).
+        ...(typeof githubIssueUrl === 'string' && /^https?:\/\//.test(githubIssueUrl)
+          ? { 'GitHub Issue': { url: githubIssueUrl } }
+          : {}),
       },
       children,
     }),
@@ -339,11 +518,13 @@ export async function drainBugReports(env, { fetch: doFetch } = {}) {
       const parsed = {
         summary: payload?.untrusted_user_input?.summary || '',
         transcript_raw: payload?.untrusted_user_input?.transcript_raw || '',
+        steps_to_reproduce: payload?.untrusted_user_input?.steps_to_reproduce || '',
+        expected: payload?.untrusted_user_input?.expected || '',
         diagnostics: payload?.diagnostics || {},
       };
 
       const issue = hasGithub ? await createGithubIssue(env, f, row, parsed) : null;
-      const page = hasNotion ? await createNotionPage(env, f, row, parsed) : null;
+      const page = hasNotion ? await createNotionPage(env, f, row, parsed, issue) : null;
 
       await env.DB.prepare(
         `UPDATE bug_reports
