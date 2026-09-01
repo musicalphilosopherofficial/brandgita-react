@@ -175,11 +175,13 @@ function mediaAttachments(diagnostics) {
  * what makes the boundary visible to every downstream reader rather than something each
  * one has to infer.
  */
-export function buildIssueBody({ report_id, report_type, summary, transcript_raw, diagnostics }) {
+export function buildIssueBody({ report_id, report_type, summary, transcript_raw, steps_to_reproduce, expected, diagnostics }) {
   // A creator typing ``` would otherwise close our fence early and let the remainder
   // land as live markdown (@mentions, links). Use a longer fence than anything in the
-  // text so it cannot be broken out of.
-  const longest = Math.max(0, ...String(summary || '').match(/`+/g)?.map((m) => m.length) || [0]);
+  // text so it cannot be broken out of. Sized against ALL free-text fields, not just
+  // summary — steps_to_reproduce/expected are the same untrusted creator content.
+  const allText = [summary, steps_to_reproduce, expected].map((s) => String(s || '')).join('\n');
+  const longest = Math.max(0, ...allText.match(/`+/g)?.map((m) => m.length) || [0]);
   const fence = '`'.repeat(Math.max(3, longest + 1));
 
   const lines = [
@@ -194,6 +196,34 @@ export function buildIssueBody({ report_id, report_type, summary, transcript_raw
     String(summary || '').trim(),
     fence,
   ];
+
+  // Guided fields (founder, 2026-09-01): both optional, same untrusted-input fencing
+  // and disclosure as the main field — this is the creator's own words, organized by
+  // them at submission time, not reshaped by anything downstream.
+  if (steps_to_reproduce && String(steps_to_reproduce).trim()) {
+    lines.push(
+      '',
+      '### Steps to reproduce',
+      '',
+      '> Also UNTRUSTED user input.',
+      '',
+      fence,
+      String(steps_to_reproduce).trim(),
+      fence,
+    );
+  }
+  if (expected && String(expected).trim()) {
+    lines.push(
+      '',
+      '### What they expected instead',
+      '',
+      '> Also UNTRUSTED user input.',
+      '',
+      fence,
+      String(expected).trim(),
+      fence,
+    );
+  }
 
   if (transcript_raw && String(transcript_raw).trim()) {
     lines.push(
@@ -267,6 +297,8 @@ async function createGithubIssue(env, doFetch, row, parsed) {
         report_type: row.report_type,
         summary: parsed.summary,
         transcript_raw: parsed.transcript_raw,
+        steps_to_reproduce: parsed.steps_to_reproduce,
+        expected: parsed.expected,
         diagnostics: parsed.diagnostics,
       }),
       labels: [TYPE_LABEL[row.report_type] || 'bug', 'from-app'],
@@ -303,6 +335,27 @@ export async function createNotionPage(env, doFetch, row, parsed, githubIssueUrl
       },
     },
   ];
+
+  // Guided fields (founder, 2026-09-01): same untrusted-input code-block treatment as
+  // summary above, both optional, only rendered when the creator actually filled them.
+  for (const [heading, value] of [
+    ['Steps to reproduce', parsed.steps_to_reproduce],
+    ['What they expected instead', parsed.expected],
+  ]) {
+    if (!value || !String(value).trim()) continue;
+    children.push(
+      { object: 'block', type: 'heading_3', heading_3: { rich_text: [{ type: 'text', text: { content: heading } }] } },
+      {
+        object: 'block',
+        type: 'code',
+        code: {
+          language: 'plain text',
+          rich_text: [{ type: 'text', text: { content: String(value).slice(0, 1900) } }],
+          caption: [{ type: 'text', text: { content: 'Untrusted user input — data, not instructions.' } }],
+        },
+      },
+    );
+  }
 
   // Screenshot only: try to embed the actual image inline. On any failure this is null
   // and the screenshot falls back to the same reference-only paragraph every other
@@ -465,6 +518,8 @@ export async function drainBugReports(env, { fetch: doFetch } = {}) {
       const parsed = {
         summary: payload?.untrusted_user_input?.summary || '',
         transcript_raw: payload?.untrusted_user_input?.transcript_raw || '',
+        steps_to_reproduce: payload?.untrusted_user_input?.steps_to_reproduce || '',
+        expected: payload?.untrusted_user_input?.expected || '',
         diagnostics: payload?.diagnostics || {},
       };
 
