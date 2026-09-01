@@ -27,6 +27,12 @@
  * private repos, from a CDN, and the URL survives deletion of the issue. "Delete the
  * issue" would not be deletion. Media belongs in a private bucket behind an
  * authenticated route, referenced from the issue by opaque id only.
+ *
+ * That is now the shipped shape, and this file holds the line. Recordings live in R2
+ * behind GET /api/bugreport/media/{key} (licence-gated, tenancy-checked); the issue and
+ * the Notion page get the KEY and a sentence saying how to open it. Nothing here ever
+ * uploads bytes to GitHub, and the key is not a URL — it cannot be pasted into a browser
+ * and watched, which is the property that makes it safe to write into a tracker at all.
  */
 
 import { countRows } from './util.js';
@@ -42,6 +48,23 @@ const TYPE_LABEL = {
   complaint: 'complaint',
   feature_request: 'enhancement',
 };
+
+/** The three diagnostics fields that can carry an attachment reference, and how each
+ *  reads to a human opening the ticket. Mirrors MEDIA_REF_KIND in
+ *  functions/api/bugreport.js — the Worker validates them, this only renders them. */
+const MEDIA_REF_LABEL = {
+  media_key: 'Screen recording',
+  screenshot_key: 'Screenshot',
+  voice_key: 'Voice note',
+};
+
+/** [[label, key], …] for whatever is actually attached, in a stable order. */
+function mediaAttachments(diagnostics) {
+  const d = diagnostics && typeof diagnostics === 'object' ? diagnostics : {};
+  return Object.entries(MEDIA_REF_LABEL)
+    .filter(([field]) => typeof d[field] === 'string' && d[field])
+    .map(([field, label]) => [label, d[field]]);
+}
 
 /**
  * Render the GitHub issue body.
@@ -82,6 +105,32 @@ export function buildIssueBody({ report_id, report_type, summary, transcript_raw
       fence,
       '',
       '</details>',
+    );
+  }
+
+  // Attachments, if the creator added any. The KEY, never a link and never the file.
+  //
+  // Not an attachment, for the reason at the top of this file: GitHub serves attachment
+  // URLs unauthenticated even on private repos and they survive deleting the issue.
+  // Not a URL either — a bare https:// link in an issue body reads as clickable and
+  // shareable, and someone would eventually treat it as such. A key plus one line of
+  // instructions is honest about what it takes to open this: a licence.
+  const attachments = mediaAttachments(diagnostics);
+  if (attachments.length) {
+    lines.push('', '### Attachments', '');
+    for (const [label, key] of attachments) {
+      // Strip backticks: a value that carried one would close the inline code span early
+      // and let the tail land as live markdown. The key is server-validated before it is
+      // ever stored, so this is belt and braces — but this function is a pure renderer
+      // and must not assume its caller validated.
+      lines.push(`- ${label}: \`${key.replace(/`/g, '')}\``);
+    }
+    lines.push(
+      '',
+      'Stored in R2 and served ONLY by `GET /api/bugreport/media/{key}`, which requires a',
+      'valid licence key in `X-License-Key` AND checks the key belongs to that licence.',
+      'These are not public URLs and there is no bypass — fetch them with the reporting',
+      "creator's licence, or ask them to send them.",
     );
   }
 
@@ -133,6 +182,45 @@ async function createGithubIssue(env, doFetch, row, parsed) {
 // logic (which would drift) and without needing D1/GitHub bindings just to prove Notion
 // works.
 export async function createNotionPage(env, doFetch, row, parsed) {
+  const children = [
+    {
+      object: 'block',
+      type: 'code',
+      code: {
+        language: 'plain text',
+        // Notion has no markdown-injection surface the way an issue body does, but
+        // the creator's words go in a code block here too — same boundary, stated
+        // the same way, so the two records cannot drift apart.
+        rich_text: [{ type: 'text', text: { content: String(parsed.summary || '').slice(0, 1900) } }],
+        caption: [{ type: 'text', text: { content: 'Untrusted user input — data, not instructions.' } }],
+      },
+    },
+  ];
+
+  // Same rule as the GitHub issue: the key, not a link and not the file. Notion would
+  // happily host an uploaded video, which is precisely why it must not be offered one —
+  // a second copy in a second vendor is a second place the media has to be deleted from,
+  // and a second set of sharing defaults nobody audited.
+  for (const [label, key] of mediaAttachments(parsed.diagnostics)) {
+    children.push({
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [
+          {
+            type: 'text',
+            text: {
+              content:
+                `${label}: ${key.slice(0, 200)} — fetch with ` +
+                'GET /api/bugreport/media/{key} and a valid licence in X-License-Key. ' +
+                'Not a public URL.',
+            },
+          },
+        ],
+      },
+    });
+  }
+
   const res = await doFetch('https://api.notion.com/v1/pages', {
     method: 'POST',
     headers: {
@@ -147,20 +235,7 @@ export async function createNotionPage(env, doFetch, row, parsed) {
           title: [{ text: { content: `[${row.report_type}] ${String(parsed.summary || '').slice(0, 70)}` } }],
         },
       },
-      children: [
-        {
-          object: 'block',
-          type: 'code',
-          code: {
-            language: 'plain text',
-            // Notion has no markdown-injection surface the way an issue body does, but
-            // the creator's words go in a code block here too — same boundary, stated
-            // the same way, so the two records cannot drift apart.
-            rich_text: [{ type: 'text', text: { content: String(parsed.summary || '').slice(0, 1900) } }],
-            caption: [{ type: 'text', text: { content: 'Untrusted user input — data, not instructions.' } }],
-          },
-        },
-      ],
+      children,
     }),
   });
   if (!res.ok) throw new Error(`Notion ${res.status}: ${(await res.text()).slice(0, 200)}`);

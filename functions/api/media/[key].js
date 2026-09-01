@@ -60,6 +60,22 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Malformed key' }, 400);
   }
 
+  // Bug-report recordings share this bucket and must NEVER be reachable from here. GET
+  // below has no auth by design (Instagram fetches scheduled reels unauthenticated), so
+  // a recording served from this route would be readable by anyone holding the URL —
+  // the exact regression decisions/in-app-bug-reporting.md refused, and the reason
+  // /api/bugreport/media/{key} exists as a separate, licence-gated route.
+  //
+  // KEY_SHAPE already excludes those keys three times over (first segment, second
+  // segment, extension), and functions/api/bugreport/_media.js pins that. This explicit
+  // refusal is deliberately redundant: the shape check is a property of a regex someone
+  // may one day widen, whereas this line states the rule in a form that has to be
+  // deleted on purpose.
+  if (key.startsWith('bugreport/')) {
+    console.warn('media: refused a bug-report key on the unauthenticated route');
+    return json({ ok: false, error: 'Invalid key' }, 400);
+  }
+
   if (!key || !KEY_SHAPE.test(key)) {
     return json({ ok: false, error: 'Invalid key' }, 400);
   }

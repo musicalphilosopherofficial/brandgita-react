@@ -38,9 +38,29 @@
  * Unlike _ratelimit.js, this quota FAILS CLOSED. That module fails open on purpose:
  * blocking a creator's publish is worse than a missing limit. Here the downstream cost
  * is a third-party bill and a polluted tracker, so an unreadable counter must reject.
+ *
+ * MEDIA — A REFERENCE, NEVER CONTENT
+ * ----------------------------------
+ * `diagnostics.media_key` may name a recording already stored by POST
+ * /api/bugreport/media. The bytes never come through here; see that file for why one
+ * combined request was rejected. Two things are still checked before the key is stored:
+ * its SHAPE, and that it sits under THIS membership's slug — otherwise a creator could
+ * cite someone else's key in their own report and read it back through
+ * GET /api/bugreport/media/{key}, which authorises against the reporting licence.
  */
 
 import { checkWhopLicense } from './_whop.js';
+import { bugMediaSlug, isCoherentMediaKey, MEDIA_PREFIX } from './bugreport/_media.js';
+
+/** The diagnostics fields that may carry an attachment reference, and the kind each one
+ *  must name. Kept as data so the check below is one loop rather than three branches
+ *  that could drift apart. Mirrored in electron-shell/bugreport.js's ALLOWED_FIELDS. */
+const MEDIA_REF_KIND = {
+  media_key: 'recording',
+  screenshot_key: 'screenshot',
+  voice_key: 'voice',
+};
+const MEDIA_REF_FIELDS = Object.keys(MEDIA_REF_KIND);
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -121,7 +141,13 @@ export async function onRequest(context) {
 
   const text = String(summary ?? '').trim();
   const raw = String(transcript_raw ?? '').trim();
-  if (!text && !raw) {
+  // A voice note is an ALTERNATIVE to typing, not a garnish on it (founder, 2026-09-01).
+  // A creator who is mid-bug and frustrated should be able to say what happened instead
+  // of composing a paragraph, so a report carrying audio is not empty even with no text.
+  // The reference is validated properly below; this is only asking "is there anything to
+  // act on at all", so a truthy check is the right strength here.
+  const hasVoice = Boolean(diagnostics && typeof diagnostics === 'object' && diagnostics.voice_key);
+  if (!text && !raw && !hasVoice) {
     return json({ ok: false, error: 'Report is empty — nothing to act on' }, 400);
   }
   if (text.length > MAX_TEXT || raw.length > MAX_TEXT) {
@@ -168,6 +194,43 @@ export async function onRequest(context) {
   } catch (err) {
     console.error('bugreport: quota check failed', { message: err?.message });
     return json({ ok: false, error: 'Could not verify report quota' }, 503);
+  }
+
+  // ── attachments: validate each REFERENCE, and that it is theirs ───────────
+  // One loop over all three fields, not three copies of the check. A fourth attachment
+  // kind should mean adding a name to MEDIA_REF_FIELDS, never adding another branch that
+  // could be written slightly differently from these.
+  const diag = diagnostics && typeof diagnostics === 'object' ? diagnostics : {};
+  const attached = MEDIA_REF_FIELDS.map((f) => [f, diag[f]]).filter(
+    ([, v]) => v !== undefined && v !== null && v !== '',
+  );
+
+  if (attached.length) {
+    let slug;
+    try {
+      slug = await bugMediaSlug(env, membership);
+    } catch (err) {
+      console.error('bugreport: media slug derivation failed', { message: err?.message });
+      return json({ ok: false, error: 'Could not verify the attached media' }, 503);
+    }
+    for (const [field, value] of attached) {
+      if (!isCoherentMediaKey(value)) {
+        return json({ ok: false, error: `${field} is not a valid attachment reference` }, 400);
+      }
+      if (!value.startsWith(`${MEDIA_PREFIX}${slug}/`)) {
+        // Citing another creator's key would make GET /api/bugreport/media/{key} hand it
+        // over, because that route authorises against the licence presenting the key. The
+        // report is where that must be caught: the reference is only ever legitimate if
+        // the licence filing the report is the one that uploaded the media.
+        return json({ ok: false, error: 'That attachment was not uploaded by this licence' }, 403);
+      }
+      // A key whose KIND does not match the field it arrived in is a client bug at best
+      // and a mislabelled preview at worst — the creator would have watched one thing
+      // and sent another. Cheap to check, and the check has to live somewhere.
+      if (value.split('/')[2] !== MEDIA_REF_KIND[field]) {
+        return json({ ok: false, error: `${field} does not reference a ${MEDIA_REF_KIND[field]}` }, 400);
+      }
+    }
   }
 
   // ── persist for the cron drain ────────────────────────────────────────────

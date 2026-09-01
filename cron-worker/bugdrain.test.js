@@ -86,6 +86,87 @@ test('a pending report is sent to both trackers and marked synced', async () => 
 });
 
 // ---------------------------------------------------------------------------
+// attached recordings — referenced, never uploaded
+// ---------------------------------------------------------------------------
+
+const MEDIA_KEY = `bugreport/${'a'.repeat(20)}/recording/20260101-${'b'.repeat(32)}.webm`;
+const SHOT_KEY = `bugreport/${'a'.repeat(20)}/screenshot/20260101-${'c'.repeat(32)}.png`;
+const VOICE_KEY = `bugreport/${'a'.repeat(20)}/voice/20260101-${'d'.repeat(32)}.ogg`;
+
+test('an attached recording is cited in the issue body by opaque key', async () => {
+  const body = buildIssueBody({
+    report_id: 'bg-1',
+    report_type: 'bug',
+    summary: 'it hung',
+    diagnostics: { os: 'darwin', media_key: MEDIA_KEY },
+  });
+  assert.ok(body.includes(MEDIA_KEY), 'the key should be quotable from the issue');
+  assert.match(body, /Screen recording: /);
+  assert.match(body, /X-License-Key/, 'the issue must say what it takes to open it');
+});
+
+test('the issue body never contains a fetchable URL for the recording', async () => {
+  // GitHub attachment URLs are served unauthenticated even on private repos and survive
+  // deleting the issue — that is why media never becomes an attachment. A bare https://
+  // link would also read as clickable and shareable, and someone would treat it as such.
+  const body = buildIssueBody({
+    report_id: 'bg-1',
+    report_type: 'bug',
+    summary: 'it hung',
+    diagnostics: { media_key: MEDIA_KEY },
+  });
+  assert.equal(/https?:\/\/[^\s)]*bugreport/.test(body), false, 'no link to the recording');
+  assert.equal(body.includes('user-images.githubusercontent'), false);
+});
+
+test('a report with no attachments says nothing about any', async () => {
+  const body = buildIssueBody({ report_id: 'bg-1', report_type: 'bug', summary: 'x', diagnostics: {} });
+  assert.equal(/Attachments/.test(body), false);
+});
+
+test('a screenshot and a voice note are cited the same way, and labelled', async () => {
+  const body = buildIssueBody({
+    report_id: 'bg-1',
+    report_type: 'bug',
+    summary: 'it hung',
+    diagnostics: { media_key: MEDIA_KEY, screenshot_key: SHOT_KEY, voice_key: VOICE_KEY },
+  });
+  assert.match(body, /Screen recording: /);
+  assert.match(body, /Screenshot: /);
+  assert.match(body, /Voice note: /);
+  for (const k of [MEDIA_KEY, SHOT_KEY, VOICE_KEY]) assert.ok(body.includes(k));
+  // Still no fetchable link for any of them.
+  assert.equal(/https?:\/\/[^\s)]*bugreport/.test(body), false);
+});
+
+test('a voice-only report still renders — voice can replace typing entirely', async () => {
+  const body = buildIssueBody({
+    report_id: 'bg-1',
+    report_type: 'bug',
+    summary: '',
+    diagnostics: { voice_key: VOICE_KEY },
+  });
+  assert.match(body, /Voice note: /);
+  assert.ok(body.includes(VOICE_KEY));
+});
+
+test('a media_key cannot break out of its inline code span', async () => {
+  // media_key is server-validated before it is ever stored, so this is belt and braces —
+  // but buildIssueBody is a pure renderer and must not assume its caller validated.
+  const body = buildIssueBody({
+    report_id: 'bg-1',
+    report_type: 'bug',
+    summary: 'x',
+    diagnostics: { media_key: '`@everyone' },
+  });
+  const line = body.split('\n').find((l) => l.startsWith('- Screen recording: '));
+  // Exactly two backticks on the line: the ones this renderer wrote. Any backtick from
+  // the value itself would close the span early and let the tail land as live markdown.
+  assert.equal((line.match(/`/g) || []).length, 2, `span broken: ${line}`);
+  assert.equal(line, '- Screen recording: `@everyone`');
+});
+
+// ---------------------------------------------------------------------------
 // prompt-injection containment — the reason the payload is fenced at rest
 // ---------------------------------------------------------------------------
 
