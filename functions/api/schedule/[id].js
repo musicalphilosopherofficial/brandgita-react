@@ -8,8 +8,12 @@ const CORS = {
 
 // Server-side scheduling horizon. Mirrors the desktop TierPolicy.can_schedule()
 // baseline (30 days) — the server enforces its own bound rather than trusting the
-// client. Kept independent of schedule.js's 60-day create window on purpose: create
-// bounds against the R2 lifecycle; reschedule bounds against product policy.
+// client. Deliberately kept at the strict 30-day creator-facing number, NOT the
+// create endpoint's 45-day cap (30 + a 15-day backstop margin): that backstop exists
+// so freshly-uploaded media has margin against R2's 75-day lifecycle, which is a
+// creation-time concern, not a reschedule one. Letting a reschedule push a post past
+// 30 days would exceed the real, advertised policy with no lifecycle justification
+// for the extra room.
 const RESCHEDULE_HORIZON_MS = 30 * 24 * 60 * 60 * 1000;
 
 function json(data, status = 200) {

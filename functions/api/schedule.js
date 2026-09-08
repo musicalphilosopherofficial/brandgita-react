@@ -84,17 +84,18 @@ export async function onRequest(context) {
       }
     }
 
-    // post_at must be a valid ISO date and within the scheduling window. The R2
-    // lifecycle deletes each asset 75 days after UPLOAD, so the window (60 days)
-    // must stay safely under that — otherwise a far-future post would lose its
-    // media before firing. 60-day window + 15-day backstop margin.
+    // post_at must be a valid ISO date and within the scheduling window. 45 days = the
+    // 30-day creator-facing scheduling policy + a 15-day server-side backstop margin (never
+    // shown to the creator — the real promise is 30). The R2 lifecycle deletes each asset 75
+    // days after upload, so this 45-day cap is what keeps that backstop safe: even at the
+    // ceiling, a post still has 30 days of margin before its media would be cleaned up.
     const postAtMs = Date.parse(post_at);
     if (isNaN(postAtMs)) {
       return json({ ok: false, error: 'post_at must be a valid ISO 8601 date string' }, 400);
     }
     const nowMs = Date.now();
-    if (postAtMs > nowMs + 60 * 24 * 60 * 60 * 1000) {
-      return json({ ok: false, error: 'post_at cannot be more than 60 days in the future' }, 400);
+    if (postAtMs > nowMs + 45 * 24 * 60 * 60 * 1000) {
+      return json({ ok: false, error: 'post_at cannot be more than 45 days in the future' }, 400);
     }
 
     const now = new Date().toISOString();
