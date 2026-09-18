@@ -173,8 +173,11 @@ async function postReel(post, assetKeys, accessToken, deps) {
   return publishAndGetPermalink(igUserId, creationId, accessToken);
 }
 
-// CAROUSEL: create one child container per image -> create carousel container
-// -> publish -> permalink.
+// CAROUSEL: create one child container per item (image OR video — the kind rides in the R2 key
+// extension the desktop uploader wrote: .jpg image child, .mp4 video child) in swipe order -> create
+// the carousel container -> publish -> permalink. Video children (animated education asset / b-roll
+// clip) must reach FINISHED before the parent container may reference them; image children are
+// ready immediately.
 async function postCarousel(post, assetKeys, accessToken, deps) {
   const igUserId = post.ig_user_id;
 
@@ -182,18 +185,35 @@ async function postCarousel(post, assetKeys, accessToken, deps) {
     throw new IgApiError('Carousel requires at least 2 items');
   }
 
-  // 1. Create a child container for each image.
+  // 1. Create a child container for each item, branching on the key extension.
   const childIds = [];
   for (const key of assetKeys) {
-    const childRes = await igPost(
-      `${igUserId}/media`,
-      { image_url: mediaUrl(key, deps.mediaBase), is_carousel_item: 'true' },
-      accessToken
-    );
-    if (!childRes.id) {
-      throw new IgApiError(`Carousel child creation returned no id for key ${key}`);
+    const url = mediaUrl(key, deps.mediaBase);
+    if (/\.mp4$/i.test(key)) {
+      // Video child. A VIDEO carousel child needs an explicit media_type (same container shape as
+      // a reel minus caption) plus is_carousel_item.
+      const childRes = await igPost(
+        `${igUserId}/media`,
+        { media_type: 'VIDEO', video_url: url, is_carousel_item: 'true' },
+        accessToken
+      );
+      if (!childRes.id) {
+        throw new IgApiError(`Carousel video child creation returned no id for key ${key}`);
+      }
+      // Video children are transcoded asynchronously; the parent may only reference a FINISHED child.
+      await waitForContainerReady(igUserId, childRes.id, accessToken, deps);
+      childIds.push(childRes.id);
+    } else {
+      const childRes = await igPost(
+        `${igUserId}/media`,
+        { image_url: url, is_carousel_item: 'true' },
+        accessToken
+      );
+      if (!childRes.id) {
+        throw new IgApiError(`Carousel child creation returned no id for key ${key}`);
+      }
+      childIds.push(childRes.id);
     }
-    childIds.push(childRes.id);
   }
 
   // 2. Create the parent carousel container referencing all children.

@@ -429,6 +429,52 @@ test('carousel happy path: N children -> parent -> publish -> permalink -> poste
   assert.equal(state.posts['post-1'].permalink, 'https://www.instagram.com/p/def456/');
 });
 
+test('mixed carousel: a .mp4 child is a VIDEO container that must FINISH before the parent', async () => {
+  const igUserId = 'acct-carousel-distinctive';
+  // Swipe order: an animated education / b-roll clip leads, then a still slide. The KIND rides in
+  // the R2 key extension (.mp4 / .jpg) the desktop uploader wrote — the poster must branch on it.
+  const assetKeys = ['mix/u-0.mp4', 'mix/u-1.jpg'];
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ ig_user_id: igUserId, type: 'carousel', asset_keys: JSON.stringify(assetKeys) }) },
+    tokens: { [igUserId]: tokenRow({ ig_user_id: igUserId, access_token: 'carousel-token' }) },
+  });
+
+  const log = [];
+  makeFetchMock([
+    // video child first (it leads the deck) — explicit media_type + is_carousel_item
+    [(u, opts, body) => isCreate(u, opts) && body.get('media_type') === 'VIDEO' && body.get('is_carousel_item') === 'true', (u, opts, body) => {
+      log.push('video-child');
+      assert.equal(u, mediaCreateUrl(igUserId));
+      assert.equal(body.get('video_url'), `${MEDIA_BASE}/mix/u-0.mp4`, 'video child must carry its own video_url');
+      assert.equal(body.get('image_url'), null, 'a video child must never set image_url');
+      return jsonOk({ id: 'vchild' });
+    }],
+    // its readiness poll must land BEFORE the parent is assembled
+    [isPollStatus, (u) => { log.push('poll'); assert.match(u, /\/vchild\?/); return jsonOk({ status_code: 'FINISHED' }); }],
+    // then the image child
+    [(u, opts, body) => isCreate(u, opts) && body.get('is_carousel_item') === 'true' && body.get('media_type') === null, (u, opts, body) => {
+      log.push('image-child');
+      assert.equal(body.get('image_url'), `${MEDIA_BASE}/mix/u-1.jpg`);
+      assert.equal(body.get('media_type'), null, 'an image child sets image_url only');
+      return jsonOk({ id: 'ichild' });
+    }],
+    [(u, opts, body) => isCreate(u, opts) && body.get('media_type') === 'CAROUSEL', (u, opts, body) => {
+      log.push('parent');
+      assert.equal(body.get('children'), 'vchild,ichild', 'parent children must preserve swipe order: video lead then image');
+      return jsonOk({ id: 'carousel-parent-1' });
+    }],
+    [isPublish, () => { log.push('publish'); return jsonOk({ id: 'media-1' }); }],
+    [isPermalink, () => { log.push('permalink'); return jsonOk({ permalink: 'https://www.instagram.com/p/mix1/' }); }],
+  ]);
+
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+
+  assert.deepEqual(log, ['video-child', 'poll', 'image-child', 'parent', 'publish', 'permalink'],
+    'the video child container must reach FINISHED before the parent carousel is created');
+  assert.equal(state.posts['post-1'].status, 'posted');
+  assert.equal(state.posts['post-1'].permalink, 'https://www.instagram.com/p/mix1/');
+});
+
 test('carousel with 1 asset throws before any Graph call — retried as a transient error', async () => {
   const { env, state } = makeEnv({
     posts: { 'post-1': post({ type: 'carousel', asset_keys: JSON.stringify(['only-one.jpg']), retry_count: 0 }) },
