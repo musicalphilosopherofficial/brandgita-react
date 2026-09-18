@@ -97,6 +97,8 @@ async function verifySignature(secret, id, timestamp, rawBody, signatureHeader) 
   }
 }
 
+import { holdPostsForMembership, resumeHeldPosts } from '../../../shared/entitlement-hold.js';
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -209,6 +211,27 @@ export async function onRequest(context) {
       }
     } catch (err) {
       console.error('Failed to revoke desktop_token on membership deactivation:', { membershipId, message: err?.message });
+    }
+
+    // Park the queue. Nulling desktop_token above stops the CLIENT, but the cron worker reads
+    // D1 directly and needs no desktop token — before this, a lapsed member's already-queued
+    // posts kept publishing on schedule, which is the exact hole this change closes. The cron
+    // now also refuses them at query time (cron-worker/poster.js ENTITLED_SQL); parking here
+    // is what makes the state VISIBLE to the creator rather than silently skipped forever.
+    try {
+      const held = await holdPostsForMembership(env, membershipId);
+      if (held) console.log('Parked scheduled posts for lapsed membership', { membershipId, held });
+    } catch (err) {
+      console.error('Failed to park scheduled posts on membership deactivation:', { membershipId, message: err?.message });
+    }
+  } else {
+    // They paid. Release the queue, judging each post against its own slot — see
+    // shared/entitlement-hold.js for why this is not simply "fire everything".
+    try {
+      const released = await resumeHeldPosts(env, membershipId);
+      if (released) console.log('Released held posts for reactivated membership', { membershipId, released });
+    } catch (err) {
+      console.error('Failed to release held posts on membership activation:', { membershipId, message: err?.message });
     }
   }
 
