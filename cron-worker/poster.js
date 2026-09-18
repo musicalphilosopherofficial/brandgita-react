@@ -56,9 +56,34 @@ function sleep(ms) {
 // minutes, so runs overlap — a plain unconditional UPDATE let two ticks both
 // process the same row and double-publish. The conditional WHERE + changes check
 // is a compare-and-swap: only one run wins.
+// The entitlement predicate, shared by the due-query and the claim CAS so the two can never
+// disagree about who is allowed to publish. Fails CLOSED: a post is publishable only when its
+// account resolves through ig_tokens.whop_membership_id to a whop_memberships row that is
+// actively 'active'. A NULL membership link (an account connected before migration 0010 added
+// the column) does NOT satisfy it — "we don't know who this is" is not permission. Reconnecting
+// re-runs /api/token, which records the membership id.
+const ENTITLED_SQL = `
+  EXISTS (
+    SELECT 1 FROM ig_tokens t
+      JOIN whop_memberships m ON m.membership_id = t.whop_membership_id
+     WHERE t.ig_user_id = scheduled_posts.ig_user_id
+       AND m.status = 'active'
+  )`;
+
+// Atomically claim a post. Returns true only if THIS run flipped it from
+// 'scheduled' to 'posting'. Cron runs every minute but a slow reel can take 5+
+// minutes, so runs overlap — a plain unconditional UPDATE let two ticks both
+// process the same row and double-publish. The conditional WHERE + changes check
+// is a compare-and-swap: only one run wins.
+//
+// The CAS also re-checks entitlement, and that is not belt-and-braces: a membership can lapse
+// in the window between the due-query selecting a row and this claim, and a slow reel keeps
+// that window open for minutes. Checking only at query time would publish for a member who
+// cancelled seconds ago.
 async function claimPost(env, id) {
   const res = await env.DB.prepare(
-    `UPDATE scheduled_posts SET status = 'posting' WHERE id = ? AND status = 'scheduled'`
+    `UPDATE scheduled_posts SET status = 'posting'
+      WHERE id = ? AND status = 'scheduled' AND ${ENTITLED_SQL}`
   ).bind(id).run();
   return res?.meta?.changes === 1;
 }
@@ -242,6 +267,7 @@ async function runDue(env, deps = {}) {
        WHERE datetime(post_at) <= datetime('now')
          AND status = 'scheduled'
          AND retry_count < 5
+         AND ${ENTITLED_SQL}
        LIMIT 10`
     ).all();
     duePosts = result.results || [];

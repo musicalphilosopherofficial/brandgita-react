@@ -80,7 +80,10 @@ test('a correctly signed membership.activated is accepted and upserts', async ()
   const res = await onRequest({ request: req(body), env });
   assert.equal(res.status, 200);
   assert.equal((await res.json()).ok, true);
-  assert.equal(env._rows.runs.length, 1);
+  // Two writes since 2026-09-19: the membership upsert, then the release of any posts parked
+  // while the subscription was lapsed (shared/entitlement-hold.js). The count is pinned rather
+  // than ignored so an accidental extra write per webhook shows up here.
+  assert.equal(env._rows.runs.length, 2);
   assert.deepEqual(env._rows.runs[0].args.slice(0, 4), ['mem_123', 'user_456', 'creator@example.com', 'active']);
 });
 
