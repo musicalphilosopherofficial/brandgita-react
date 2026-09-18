@@ -178,7 +178,7 @@ export default function Waitlist() {
   const [mac, setMac] = useState(null)           // 'pro' | 'neo' | 'intel'
   const [winSetup, setWinSetup] = useState(null) // 'intel-nvidia' | 'amd-nvidia' | 'intel-qsv' | 'amd-unsupported'
   const [ram, setRam] = useState(null)           // '16gb-plus' | 'under-16gb'
-  const [ai, setAi] = useState(null)             // 'claude' | 'gemini' | 'ollama' | 'openai' | 'none'
+  const [ai, setAi] = useState(null)             // 'claude' | 'openrouter' | 'none'
 
   // Geo gate — Brand Gita is not offered to EEA/UK/Swiss residents (privacy policy).
   const regionRejected = region === 'uk-eu-swiss'
@@ -558,25 +558,11 @@ export default function Waitlist() {
                   onClick={() => { setAi('claude'); trackStep(sessionId, 'ai', 'claude') }}
                 />
                 <RadioCard
-                  label="ChatGPT / OpenAI"
-                  sublabel="ChatGPT Plus, GPT-4, or OpenAI API"
-                  selected={ai === 'openai'}
-                  status={ai === 'openai' ? 'accepted' : null}
-                  onClick={() => { setAi('openai'); trackStep(sessionId, 'ai', 'openai') }}
-                />
-                <RadioCard
-                  label="Google Gemini"
-                  sublabel="Free tier works · Gemini Advanced recommended"
-                  selected={ai === 'gemini'}
-                  status={ai === 'gemini' ? 'accepted' : null}
-                  onClick={() => { setAi('gemini'); trackStep(sessionId, 'ai', 'gemini') }}
-                />
-                <RadioCard
-                  label="Ollama (local, free)"
-                  sublabel="AI running on your own machine — no subscription needed"
-                  selected={ai === 'ollama'}
-                  status={ai === 'ollama' ? 'accepted' : null}
-                  onClick={() => { setAi('ollama'); trackStep(sessionId, 'ai', 'ollama') }}
+                  label="OpenRouter"
+                  sublabel="Bring your own API key · pay per use"
+                  selected={ai === 'openrouter'}
+                  status={ai === 'openrouter' ? 'accepted' : null}
+                  onClick={() => { setAi('openrouter'); trackStep(sessionId, 'ai', 'openrouter') }}
                 />
                 <RadioCard
                   label="None — I don't have one"
@@ -588,7 +574,7 @@ export default function Waitlist() {
               </div>
               {ai === 'none' && (
                 <p style={rejectedMsgStyle}>
-                  Brand Gita requires your own AI subscription — it runs on your account, not ours. You&rsquo;ll need to sign up for Claude, ChatGPT, or Gemini (or run Ollama locally for free) before applying.
+                  Brand Gita requires your own AI subscription — it runs on your account, not ours. You&rsquo;ll need a Claude subscription or an OpenRouter API key before applying.
                 </p>
               )}
             </div>

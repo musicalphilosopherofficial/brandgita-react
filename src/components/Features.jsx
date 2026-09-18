@@ -69,7 +69,7 @@ export default function Features() {
           Coming soon
         </span>
         <span style={{ fontSize: '0.8rem', fontWeight: 300, color: '#6E6B62', lineHeight: 1.5 }}>
-          TikTok publishing &nbsp;·&nbsp; LinkedIn carousels &nbsp;·&nbsp; Analytics &amp; coaching layer &nbsp;·&nbsp; Motion graphic reels
+          TikTok publishing &nbsp;·&nbsp; LinkedIn carousels &nbsp;·&nbsp; Newsletter &nbsp;·&nbsp; Analytics &nbsp;·&nbsp; Motion graphic reels
         </span>
       </div>
     </div>

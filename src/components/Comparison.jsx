@@ -47,8 +47,6 @@ export default function Comparison() {
           One interview. Every piece of content, forever.
         </p>
         <ul style={{ margin: 0, padding: 0 }}>
-          <ListItem>Pre-shoot coaching — <B>lighting, framing, delivery, story</B></ListItem>
-          <ListItem>Post-shoot coaching — <B>what landed, what to sharpen next time</B></ListItem>
           <ListItem><B>No editing skills needed</B></ListItem>
           <ListItem>Brand voice captured in a <B>one-time interview</B> — <B>every clip inherits it, no re-briefing, ever</B></ListItem>
           <ListItem><B>Applied to every piece of content, forever</B></ListItem>
@@ -56,7 +54,7 @@ export default function Comparison() {
           <ListItem><B>Batch record once</B>, publish for months</ListItem>
           <ListItem>Recommends what to post — <B>you always have the final say</B></ListItem>
           <ListItem>Clips, carousels, captions — <B>all on-brand</B></ListItem>
-          <ListItem><B>No manual uploads</B> — <B>auto schedules and publishes</B> to YouTube and Instagram</ListItem>
+          <ListItem><B>No manual uploads</B> — <B>auto schedules and publishes to Instagram</B>; YouTube uploads for you, one tap to go live</ListItem>
         </ul>
       </div>
 

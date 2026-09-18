@@ -9,7 +9,7 @@ const faqs = [
   },
   {
     q: 'Do you use your own AI or mine?',
-    a: 'Yours. Brand Gita works with Claude, Google Gemini, and Ollama in V1 — no API keys to manage. For Claude, a Pro subscription is the minimum; Max is recommended for heavy editing sessions. For Gemini, a free Google account is enough to run the CLI; Gemini Advanced is recommended for heavier use. Ollama is free.',
+    a: 'Yours. Brand Gita works with Claude (via a CLI subscription) or OpenRouter in V1. For Claude, a Pro subscription is the minimum; Max is recommended for heavy editing sessions. For OpenRouter, you bring your own API key and pay per use.',
   },
   {
     q: 'What is the brand interview?',
@@ -21,7 +21,7 @@ const faqs = [
   },
   {
     q: 'What do I need to get started?',
-    a: 'Your video, and at least one of: Claude Pro or higher, Google Gemini (free Google account or above), Ollama, or ChatGPT / OpenAI. Hardware requirements are on the application form.',
+    a: 'Your video, and either a Claude Pro (or higher) CLI subscription or an OpenRouter API key. Hardware requirements are on the application form.',
   },
   {
     q: 'When can I get access?',

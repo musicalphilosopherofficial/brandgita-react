@@ -146,27 +146,6 @@ const KEYFRAMES = `
     78%  { opacity: 1; }
     100% { opacity: 0; transform: translateX(28px); }
   }
-  @keyframes bg-hm-bal1 {
-    0%, 66% { opacity: 0; }
-    68%   { opacity: 1; }
-    72%   { opacity: 1; }
-    73.5% { opacity: 0; }
-    100%  { opacity: 0; }
-  }
-  @keyframes bg-hm-bal2 {
-    0%, 73.5% { opacity: 0; }
-    74.5% { opacity: 1; }
-    78%   { opacity: 1; }
-    79%   { opacity: 0; }
-    100%  { opacity: 0; }
-  }
-  @keyframes bg-hm-bal3 {
-    0%, 79% { opacity: 0; }
-    80%   { opacity: 1; }
-    81.5% { opacity: 1; }
-    82.5% { opacity: 0; }
-    100%  { opacity: 0; }
-  }
   @keyframes bg-dot {
     0%, 100% { opacity: 1; }
     50%      { opacity: .28; }
@@ -377,15 +356,15 @@ const BANNER_HTML = `
       </div>
 
       <div style="width: 104px; box-sizing: border-box; border: 1px solid #2196F3; border-radius: 2px; background: #F4F0E8; padding: 7px 9px; display: flex; flex-direction: column; gap: 3px; animation-name: bg-hm-card; animation-duration: var(--bg-cycle, 11.5s); animation-iteration-count: infinite; animation-fill-mode: backwards; animation-timing-function: linear;">
-        <span style="font-size: 5px; font-weight: 700; letter-spacing: 0.22em; color: #3D3B35;">BALANCE</span>
-        <div style="position: relative; height: 16px;">
-          <span style="position: absolute; left: 0; top: 0; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; color: #2196F3; animation-name: bg-hm-bal1; animation-duration: var(--bg-cycle, 11.5s); animation-iteration-count: infinite; animation-fill-mode: backwards; animation-timing-function: linear;">$1,240</span>
-          <span style="position: absolute; left: 0; top: 0; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; color: #2196F3; animation-name: bg-hm-bal2; animation-duration: var(--bg-cycle, 11.5s); animation-iteration-count: infinite; animation-fill-mode: backwards; animation-timing-function: linear;">$1,880</span>
-          <span style="position: absolute; left: 0; top: 0; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; color: #2196F3; animation-name: bg-hm-bal3; animation-duration: var(--bg-cycle, 11.5s); animation-iteration-count: infinite; animation-fill-mode: backwards; animation-timing-function: linear;">$2,460</span>
+        <span style="font-size: 5px; font-weight: 700; letter-spacing: 0.22em; color: #3D3B35;">REVENUE</span>
+        <div style="position: relative; height: 16px; display: flex; align-items: flex-end; gap: 3px;">
+          <div style="width: 6px; height: 7px; background: #2196F3; border-radius: 1px;"></div>
+          <div style="width: 6px; height: 11px; background: #2196F3; border-radius: 1px;"></div>
+          <div style="width: 6px; height: 16px; background: #2196F3; border-radius: 1px;"></div>
         </div>
         <div style="display: flex; align-items: center; gap: 4px;">
           <span style="width: 0; height: 0; border-left: 2.5px solid transparent; border-right: 2.5px solid transparent; border-bottom: 4px solid #2196F3;"></span>
-          <span style="font-size: 5px; font-weight: 700; letter-spacing: 0.2em; color: #2196F3;">DEPOSIT</span>
+          <span style="font-size: 5px; font-weight: 700; letter-spacing: 0.2em; color: #2196F3;">TRENDING UP</span>
         </div>
       </div>
     </div>
@@ -412,7 +391,7 @@ const BANNER_HTML = `
       <div style="width: 1px; height: 52px; background: #D0CBC0;"></div>
       <div style="display: flex; flex-direction: column; gap: 6px;">
         <span style="font-size: 28px; font-weight: 700; color: #2196F3; letter-spacing: -0.02em; line-height: 1.1;">BrandGita</span>
-        <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.22em; color: #3D3B35; text-transform: uppercase;">Your Brand's Personal Stylist</span>
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.22em; color: #3D3B35; text-transform: uppercase;">Your Personal Brand Salon</span>
       </div>
     </div>
 
