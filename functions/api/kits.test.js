@@ -105,3 +105,55 @@ test('a body that is not an object at all is refused', () => {
     assert.ok(sanitiseKit(bad).error, `${JSON.stringify(bad)} was accepted`);
   }
 });
+
+// ── Voice Gita — the third gita, added 2026-09-12 (migration 0015) ────────────────────────
+//
+// Founder: "bring it to a point of a strong first prototype that works end to end with our
+// cloudflare component that has the 2 gitas and now voice gita per user."
+//
+// Voice belongs beside vision and aesthetic for the reason 0014 already gives: it is the output
+// of material the creator recorded once, and losing it means speaking it all again. What makes
+// it safe to store is that it is BOUNDED by construction — seven slots, three specimens each,
+// one sentence each — so unlike a transcript store this column cannot grow with the corpus.
+
+const VOICE = JSON.stringify({
+  creator: 'duncan',
+  slots: {
+    sentence_habit: [{ text: 'Sharpening. Nobody sharpens.', source: 'interview', weight: 0.9 }],
+  },
+});
+
+test('a voice profile syncs alongside the other two gitas', () => {
+  const { kit, error } = sanitiseKit({ ...KIT, voice_gita: VOICE });
+  assert.strictEqual(error, undefined);
+  assert.strictEqual(kit.voice_gita, VOICE);
+});
+
+test('voice_gita is one of the synced fields and is not silently dropped', () => {
+  assert.ok(SYNCED_FIELDS.includes('voice_gita'));
+});
+
+test('a creator who has never spoken still syncs their kit', () => {
+  // Voice is optional by design — the tab is opt-in and most creators will not have used it.
+  const { kit, error } = sanitiseKit(KIT);
+  assert.strictEqual(error, undefined);
+  assert.strictEqual(kit.voice_gita, null);
+});
+
+test('a malformed voice profile is refused at write time, not discovered at read time', () => {
+  // Same argument as brand_spec: storing corrupt JSON means it fails on every future sync down,
+  // and the creator's working copy gets overwritten by something unparseable.
+  assert.match(sanitiseKit({ ...KIT, voice_gita: '{not json' }).error, /valid JSON/);
+});
+
+test('a voice profile is small enough that it cannot be what blows the kit ceiling', () => {
+  // VoiceGita.MAX_RENDERED_CHARS is under 2 KB; the JSON around it is a small multiple.
+  assert.ok(VOICE.length < 4096, `voice payload was ${VOICE.length} bytes`);
+});
+
+test('a client sending raw recorded material gets it dropped, not stored', () => {
+  // Only the creator's own recordings may teach a voice, and keeping the corpus server-side
+  // would turn a bounded profile into an unbounded archive of someone talking about themselves.
+  const { kit } = sanitiseKit({ ...KIT, voice_gita: VOICE, voice_corpus: 'an hour of transcript' });
+  assert.ok(!('voice_corpus' in kit));
+});

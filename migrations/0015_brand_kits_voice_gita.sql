@@ -1,0 +1,24 @@
+-- Voice Gita joins the two gitas already synced per creator.
+--
+-- WHY (founder, 2026-09-12): *"bring it to a point of a strong first prototype that works end
+-- to end with our cloudflare component that has the 2 gitas and now voice gita per user."*
+--
+-- The original table (0014) stored the irreplaceable IP: vision-gita.md, aesthetic-gita.md and
+-- brand-spec.json. Voice Gita belongs in exactly that category and for exactly the same reason
+-- 0014 gives — it is the output of material the creator recorded once. Lose it and they have to
+-- speak it all again. It is also the cheapest possible row to add: the profile is BOUNDED by
+-- construction (seven slots, three specimens, one sentence each), so this column cannot grow
+-- with the corpus the way a transcript store would.
+--
+-- STORED AS voice-gita.json, the output of VoiceGita.to_dict() — whose own comment has said
+-- "the wire format, for the worker" since the day it was written. This is that worker.
+--
+-- The 512 KB per-kit ceiling in kits.js is unchanged and still generous: VoiceGita.
+-- MAX_RENDERED_CHARS is under 2 KB, and the JSON around it is a small multiple of that.
+--
+-- NOT stored here: the recorded material the specimens were drawn from. Only the creator's own
+-- recordings may teach a voice (voice_gita.RECORDED_SOURCES), and keeping the raw corpus server
+-- -side would turn a bounded profile into an unbounded archive of someone talking about
+-- themselves. The profile is the artefact worth protecting; the corpus is not ours to hold.
+
+ALTER TABLE brand_kits ADD COLUMN voice_gita TEXT;   -- voice-gita.json, as written

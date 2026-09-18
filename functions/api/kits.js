@@ -33,8 +33,26 @@ const CORS = {
 /** Per-kit ceiling. The three files are ~32 KB; 512 KB is generous and still bounded. */
 export const MAX_KIT_BYTES = 512 * 1024;
 
-/** The only fields that sync. Anything else a client sends is dropped, not stored. */
-export const SYNCED_FIELDS = Object.freeze(['vision_gita', 'aesthetic_gita', 'brand_spec']);
+/**
+ * The only fields that sync. Anything else a client sends is dropped, not stored.
+ *
+ * `voice_gita` joined on 2026-09-12 (migration 0015). It is the same class of thing as the two
+ * gitas beside it — the output of material the creator recorded once, which they would have to
+ * speak again if it were lost — and it is bounded by construction, so it cannot grow the row
+ * over time the way a transcript store would.
+ */
+export const SYNCED_FIELDS = Object.freeze([
+  'vision_gita', 'aesthetic_gita', 'brand_spec', 'voice_gita',
+]);
+
+/**
+ * Synced fields that must parse as JSON before they are stored.
+ *
+ * The two gitas are markdown and are stored as written. `brand_spec` and `voice_gita` are
+ * machine-readable and are validated, because a corrupt one that syncs back down replaces a
+ * working local copy with something nothing can read.
+ */
+export const JSON_FIELDS = Object.freeze(['brand_spec', 'voice_gita']);
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -85,13 +103,15 @@ export function sanitiseKit(body) {
     return { error: `kit is ${Math.round(bytes / 1024)} KB; the limit is ${MAX_KIT_BYTES / 1024} KB` };
   }
 
-  // brand_spec is JSON on the client and JSON on the way back. Rejecting malformed JSON here
-  // means a corrupt spec cannot be stored and then fail on every future sync down.
-  if (out.brand_spec !== null) {
+  // These are JSON on the client and JSON on the way back. Rejecting malformed JSON here means
+  // a corrupt file cannot be stored and then fail on every future sync down — worse, sync down
+  // and overwrite the creator's good working copy with something unparseable.
+  for (const field of JSON_FIELDS) {
+    if (out[field] === null) continue;
     try {
-      JSON.parse(out.brand_spec);
+      JSON.parse(out[field]);
     } catch {
-      return { error: 'brand_spec must be valid JSON' };
+      return { error: `${field} must be valid JSON` };
     }
   }
 
@@ -158,14 +178,16 @@ export async function onRequest(context) {
     const updatedAt = new Date().toISOString();
     try {
       await env.DB.prepare(
-        `INSERT INTO brand_kits (membership_id, slug, vision_gita, aesthetic_gita, brand_spec, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO brand_kits (membership_id, slug, vision_gita, aesthetic_gita, brand_spec, voice_gita, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(membership_id, slug) DO UPDATE SET
            vision_gita = excluded.vision_gita,
            aesthetic_gita = excluded.aesthetic_gita,
            brand_spec = excluded.brand_spec,
+           voice_gita = excluded.voice_gita,
            updated_at = excluded.updated_at`
-      ).bind(member, slug, kit.vision_gita, kit.aesthetic_gita, kit.brand_spec, updatedAt).run();
+      ).bind(member, slug, kit.vision_gita, kit.aesthetic_gita, kit.brand_spec,
+             kit.voice_gita, updatedAt).run();
     } catch (err) {
       console.error('D1 write error (brand_kits):', { message: err?.message });
       return json({ ok: false, error: 'Could not save your brand kit' }, 500);
