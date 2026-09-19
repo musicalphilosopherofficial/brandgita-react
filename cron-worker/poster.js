@@ -7,9 +7,11 @@
 //
 // Bindings used:
 //   env.DB — D1 database (scheduled_posts, ig_tokens)
-//
-// Media assets are fetched by Meta from the Pages site's public
-// https://brandgita.com/api/media/{key} endpoint, so this Worker needs no R2 binding.
+//   env.SCHEDULE_BUCKET — R2 bucket. NOT used by the publish path itself: Meta fetches
+//     scheduled media from the Pages site's public https://brandgita.com/api/media/{key}
+//     endpoint, so publishing needs no R2 access here. It's used by the daily data-retention
+//     purge (../shared/data-retention.js) to delete a lapsed creator's held/missed post
+//     media, and by bugdrain.js to read a bug report's screenshot bytes for Notion.
 //
 // Design notes:
 //   - R2 objects are private and have no built-in presigned GET URL in Workers.
@@ -26,6 +28,7 @@
 import { drainBugReports } from './bugdrain.js';
 import { adapterFor, ADAPTERS } from './platforms/index.js';
 import { DEFAULT_PLATFORM, contractFor } from '../shared/platform-contracts.js';
+import { runDataRetentionPurge } from '../shared/data-retention.js';
 import { MEDIA_BASE, countRows } from './util.js';
 
 // Container processing poll configuration (reels are transcoded async by Meta).
@@ -322,6 +325,21 @@ export { processPost, handleRetryableFailure, claimPost, runDue };
 
 export default {
   async scheduled(event, env, ctx) {
+    // The daily retention purge is its own cron trigger (0 3 * * *, see wrangler.toml) so
+    // it runs once a day rather than on every minute tick — D1 bills per row read, and the
+    // query in findLapsedMemberships has no reason to run 1,440 times for a 24-hour answer.
+    // Isolated in its own try/catch for the same reason bugdrain and token-refresh below
+    // are: a purge failure must never be allowed to look like a reason to skip publishing.
+    if (event.cron === '0 3 * * *') {
+      try {
+        const purged = await runDataRetentionPurge(env);
+        if (purged.length) console.log('data-retention', JSON.stringify(purged));
+      } catch (err) {
+        console.error('data-retention: unhandled', { message: err?.message });
+      }
+      return;
+    }
+
     await runDue(env, {});
 
     // Drain queued bug reports into GitHub/Notion. Isolated in its own try/catch for

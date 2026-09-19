@@ -1,0 +1,16 @@
+-- Apply with:
+--   npx wrangler d1 execute brandgita-waitlist --remote --file=./migrations/0017_whop_memberships_purged_at.sql
+--
+-- Marks when a lapsed membership's cloud data (ig_tokens, held/missed scheduled_posts +
+-- their R2 objects, brand_kits) was purged under the founder's 15-day grace-period policy
+-- (2026-09-19) — see shared/data-retention.js for the full rule.
+--
+-- WHY THIS COLUMN, RATHER THAN INFERRING "PURGED" FROM email IS NULL. Whop's own webhook
+-- payload does not guarantee an email (migration 0009's own comment: "nullable, not
+-- guaranteed present"), so a membership that arrived with no email would look
+-- already-purged on day one and never get its ig_tokens/scheduled_posts/brand_kits touched.
+-- An explicit column is the only correct "not yet purged" marker.
+--
+-- A plain ALTER (not a rebuild) because this is an ADDITIVE nullable column, not a CHECK —
+-- the situation that forced 0016's table rebuild does not apply here.
+ALTER TABLE whop_memberships ADD COLUMN purged_at TEXT;

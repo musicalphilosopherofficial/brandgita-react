@@ -35,7 +35,12 @@ binding = "SCHEDULE_BUCKET"
 bucket_name = "brandgita-scheduled"
 
 [triggers]
-crons = ["* * * * *"]
+# The minute cron is the poster/bugdrain/token-refresh tick. The daily cron (03:00 UTC, a
+# quiet hour for a mostly-US/creator audience) runs the 15-day data-retention purge —
+# see shared/data-retention.js. poster.js's scheduled() branches on event.cron to tell them
+# apart; a single Worker with two triggers avoids standing up a second deployment for a job
+# that touches the exact same D1 database and R2 bucket this one already binds.
+crons = ["* * * * *", "0 3 * * *"]
 
 # ── Workers Logs — free tier, no plan upgrade ────────────────────────────────
 # Retained, queryable logs in the dashboard. Free plan: 200k logs/day, 3-day
