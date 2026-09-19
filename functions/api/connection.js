@@ -18,6 +18,56 @@ function json(data, status = 200) {
   });
 }
 
+// The Whop entitlement verdict — a FIELD on the response this endpoint already returns,
+// never a gate on the endpoint itself. The desktop already polls this as a publish
+// pre-flight; folding the verdict in here means it learns "your subscription lapsed" the
+// same way it learns "your token expired", instead of a second endpoint the client has to
+// separately poll and reconcile against network failures.
+//
+// One query (a LEFT JOIN, not a missing-row branch to duplicate) answers three cases at
+// once: no ig_tokens row, an ig_tokens row with no whop_membership_id, and a genuinely
+// linked membership.
+async function getEntitlement(env, ig_user_id) {
+  let row;
+  try {
+    row = await env.DB.prepare(
+      `SELECT wm.status AS membership_status
+         FROM ig_tokens it
+         LEFT JOIN whop_memberships wm ON wm.membership_id = it.whop_membership_id
+        WHERE it.ig_user_id = ?`
+    ).bind(ig_user_id).first();
+  } catch (err) {
+    console.error('D1 select error (entitlement):', { message: err?.message });
+    // Fail open — the same posture as the device check and the Meta probe below. This is
+    // an informational field on an already-permissive endpoint, not a new enforcement
+    // gate: cron-worker/poster.js's ENTITLED_SQL is what actually stops a lapsed member's
+    // posts from publishing, and it re-checks Whop status independently of this value.
+    return { entitled: true, entitlement_reason: 'check_failed' };
+  }
+
+  // No ig_tokens row (never connected), or a row whose whop_membership_id is null (a
+  // connection made before Whop billing existed). Nothing to check entitlement against.
+  if (!row || row.membership_status == null) {
+    return { entitled: true, entitlement_reason: 'unlinked' };
+  }
+
+  // 'active' is the only status migrations/0009's CHECK allows that is NOT "after
+  // membership.deactivated". Whop does not fire deactivated for a trial, a completed
+  // one-time plan, or a card in its retry grace — those all remain 'active' here until the
+  // grace genuinely runs out — so this one comparison already implements "entitled =
+  // active/trialing/completed/past_due, not entitled = canceled/expired" without this
+  // table needing Whop's finer-grained status vocabulary.
+  if (row.membership_status === 'active') {
+    return { entitled: true, entitlement_reason: 'active' };
+  }
+
+  return {
+    entitled: false,
+    entitlement_reason: 'membership_lapsed',
+    entitlement_message: 'Your Brand Gita subscription has ended. Reconnect after resubscribing to resume publishing.',
+  };
+}
+
 // GET /api/connection — "is my stored IG token still publish-valid?"
 //
 // The desktop calls this before firing the first scheduled post so a creator hits
@@ -31,6 +81,13 @@ function json(data, status = 200) {
 // Returns 200 with a status object for every *connection* state (connected or not,
 // publishable or not). Reserves { ok:false } + non-200 for real server faults
 // (DB/decrypt), so the desktop can branch on `publishable` without parsing errors.
+//
+// Also always carries the Whop entitlement verdict: `entitled` (true/false), plus
+// `entitlement_reason` (a machine slug: 'active' | 'membership_lapsed' | 'unlinked' |
+// 'check_failed') and, only when not entitled, a human `entitlement_message`. This is
+// deliberately a FIELD, not a gate — the endpoint never 402s a lapsed member, because a
+// hard-gated endpoint can't tell the desktop "your subscription lapsed" apart from
+// "the network is down". See getEntitlement() below for what counts as entitled.
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -45,6 +102,10 @@ export async function onRequest(context) {
   const auth = await requireUserAuth(request, env);
   if (auth.error) return auth.error;
   const { ig_user_id } = auth;
+
+  // Computed once, up front, so every branch below — device_moved, not_connected,
+  // token_invalid, check_failed, and the success path — carries the same verdict.
+  const entitlement = await getEntitlement(env, ig_user_id);
 
   // DEVICE RE-VALIDATION — the enforcement point for a licence that has moved machines.
   //
@@ -88,7 +149,7 @@ export async function onRequest(context) {
         // their own app: this is a convenience re-check, and the authoritative gate is
         // still /api/token at connect.
         return json(
-          { ok: true, connected: false, publishable: false, reason: 'device_moved' },
+          { ok: true, connected: false, publishable: false, reason: 'device_moved', ...entitlement },
           200,
         );
       }
@@ -110,7 +171,7 @@ export async function onRequest(context) {
   // No token stored — the account was never connected, or the desktop token was
   // revoked. Not an error; a legitimate "reconnect" answer.
   if (!row || !row.access_token) {
-    return json({ ok: true, connected: false, publishable: false, reason: 'not_connected' });
+    return json({ ok: true, connected: false, publishable: false, reason: 'not_connected', ...entitlement });
   }
 
   const expires_at = row.token_expiry ?? null;
@@ -139,13 +200,13 @@ export async function onRequest(context) {
       const code = data?.error?.code;
       console.error('IG content_publishing_limit non-OK:', { status: res.status, code });
       const reason = code === 190 ? 'token_invalid' : 'permission';
-      return json({ ok: true, connected: true, publishable: false, reason, expires_at });
+      return json({ ok: true, connected: true, publishable: false, reason, expires_at, ...entitlement });
     }
   } catch (err) {
     // Couldn't reach Meta — the token may be fine; report the check itself failed
     // so the desktop can retry rather than telling the creator to reconnect.
     console.error('IG content_publishing_limit network error:', { message: err?.message });
-    return json({ ok: true, connected: true, publishable: null, reason: 'check_failed', expires_at });
+    return json({ ok: true, connected: true, publishable: null, reason: 'check_failed', expires_at, ...entitlement });
   }
 
   // Publish-valid. Surface the rolling 24h quota so the desktop can warn before a
@@ -183,5 +244,6 @@ export async function onRequest(context) {
     quota_usage,
     quota_total,
     media_slug,
+    ...entitlement,
   });
 }
