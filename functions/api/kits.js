@@ -40,17 +40,22 @@ export const MAX_KIT_BYTES = 512 * 1024;
  * gitas beside it — the output of material the creator recorded once, which they would have to
  * speak again if it were lost — and it is bounded by construction, so it cannot grow the row
  * over time the way a transcript store would.
+ *
+ * `stylist_memory` joined on 2026-09-19 (migration 0018) — the raw history.jsonl content
+ * behind a creator's saved stylist preferences (brand_gita_core/memory/store.py). Same
+ * reasoning as voice_gita: something the creator told the app once, lost otherwise.
  */
 export const SYNCED_FIELDS = Object.freeze([
-  'vision_gita', 'aesthetic_gita', 'brand_spec', 'voice_gita',
+  'vision_gita', 'aesthetic_gita', 'brand_spec', 'voice_gita', 'stylist_memory',
 ]);
 
 /**
  * Synced fields that must parse as JSON before they are stored.
  *
- * The two gitas are markdown and are stored as written. `brand_spec` and `voice_gita` are
- * machine-readable and are validated, because a corrupt one that syncs back down replaces a
- * working local copy with something nothing can read.
+ * The two gitas are markdown and `stylist_memory` is JSONL (one JSON object per line, not one
+ * JSON document) — all three are stored as written, unparsed. `brand_spec` and `voice_gita`
+ * are single machine-readable JSON documents and ARE validated, because a corrupt one that
+ * syncs back down replaces a working local copy with something nothing can read.
  */
 export const JSON_FIELDS = Object.freeze(['brand_spec', 'voice_gita']);
 
@@ -146,8 +151,13 @@ export async function onRequest(context) {
   // ── GET — every kit this customer owns ─────────────────────────────────────
   if (request.method === 'GET') {
     try {
+      // Built from SYNCED_FIELDS rather than hand-listed, so a field added there (voice_gita,
+      // stylist_memory) can never again silently miss this SELECT the way voice_gita did from
+      // 2026-09-12 to 2026-09-19 — every PUT stored it, but GET never returned it, so a pull
+      // onto a second machine (or after a reinstall) silently came back without it every time,
+      // with no error anywhere to notice by.
       const rows = await env.DB.prepare(
-        `SELECT slug, vision_gita, aesthetic_gita, brand_spec, updated_at
+        `SELECT slug, ${SYNCED_FIELDS.join(', ')}, updated_at
            FROM brand_kits WHERE membership_id = ? ORDER BY updated_at DESC`
       ).bind(member).all();
       return json({ ok: true, kits: rows.results || [] });

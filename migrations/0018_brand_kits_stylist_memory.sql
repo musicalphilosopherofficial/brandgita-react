@@ -1,0 +1,23 @@
+-- Stylist preference memory joins the IP already synced per creator.
+--
+-- WHY (founder, 2026-09-19): "user preferences while chatting with stylist ... Id liek to sync
+-- in cloud as well" — the same 15-day-grace / resubscribe-without-losing-work story that
+-- already covers vision-gita, aesthetic-gita, brand-spec and voice-gita (0014/0015) applies
+-- here: a creator's saved stylist preferences ("no orange in thumbnails") are the output of
+-- something they told the app once, and losing them on a new machine or after a lapsed
+-- membership means re-teaching the stylist from scratch.
+--
+-- STORED AS the raw history.jsonl content (brand_gita_core/memory/store.py's
+-- CreatorMemory.history_path) — the append-only log, NOT profile.json/notes.json. Those two
+-- are folded PROJECTIONS regenerated from the log on every write (store.py's regenerate());
+-- syncing them separately would just be syncing a derivative that can disagree with its
+-- source, the exact reason brand-spec.json's own tokens.css/index.html are excluded from
+-- 0014. Pulling the log and re-running the fold locally reconstructs both for free.
+--
+-- The 512 KB per-kit ceiling in kits.js is unchanged. The log is loosely bounded in practice —
+-- store.py caps the STATED/NOTES *projections* at 400+200 tokens combined, and a declined
+-- entry is written once per (scope, attribute) pair (R10: never asked again), so the number of
+-- rows a real creator can generate this way stays small even though the log itself has no
+-- explicit row cap.
+
+ALTER TABLE brand_kits ADD COLUMN stylist_memory TEXT;   -- history.jsonl, verbatim
