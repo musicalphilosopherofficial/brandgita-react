@@ -36,26 +36,33 @@ export const MAX_KIT_BYTES = 512 * 1024;
 /**
  * The only fields that sync. Anything else a client sends is dropped, not stored.
  *
- * `voice_gita` joined on 2026-09-12 (migration 0015). It is the same class of thing as the two
- * gitas beside it — the output of material the creator recorded once, which they would have to
- * speak again if it were lost — and it is bounded by construction, so it cannot grow the row
- * over time the way a transcript store would.
+ * `vision_gita` and `aesthetic_gita` LEFT on 2026-09-25. Both artifacts were retired by
+ * decisions/gita-consolidation.md (2026-09-24) — Aesthetic Gita split three ways (taste to
+ * Ikivibe, resolution rules to kit config, production values to brand-spec) and Vision Gita
+ * with it. Syncing a retired artifact is worse than not syncing it: it keeps a dead file
+ * authoritative across devices. An OLD CLIENT THAT STILL SENDS THEM IS FINE — this list is
+ * the filter, so the extra fields are dropped exactly like any other unknown key.
+ *
+ * `voice_gita` joined on 2026-09-12 (migration 0015) and is now the only Gita that syncs. It
+ * is the output of material the creator recorded once, which they would have to speak again if
+ * it were lost, and it is bounded by construction, so it cannot grow the row over time the way
+ * a transcript store would.
  *
  * `stylist_memory` joined on 2026-09-19 (migration 0018) — the raw history.jsonl content
  * behind a creator's saved stylist preferences (brand_gita_core/memory/store.py). Same
  * reasoning as voice_gita: something the creator told the app once, lost otherwise.
  */
 export const SYNCED_FIELDS = Object.freeze([
-  'vision_gita', 'aesthetic_gita', 'brand_spec', 'voice_gita', 'stylist_memory',
+  'brand_spec', 'voice_gita', 'stylist_memory',
 ]);
 
 /**
  * Synced fields that must parse as JSON before they are stored.
  *
- * The two gitas are markdown and `stylist_memory` is JSONL (one JSON object per line, not one
- * JSON document) — all three are stored as written, unparsed. `brand_spec` and `voice_gita`
- * are single machine-readable JSON documents and ARE validated, because a corrupt one that
- * syncs back down replaces a working local copy with something nothing can read.
+ * `stylist_memory` is JSONL (one JSON object per line, not one JSON document) and is stored as
+ * written, unparsed. `brand_spec` and `voice_gita` are single machine-readable JSON documents
+ * and ARE validated, because a corrupt one that syncs back down replaces a working local copy
+ * with something nothing can read.
  */
 export const JSON_FIELDS = Object.freeze(['brand_spec', 'voice_gita']);
 
@@ -188,16 +195,13 @@ export async function onRequest(context) {
     const updatedAt = new Date().toISOString();
     try {
       await env.DB.prepare(
-        `INSERT INTO brand_kits (membership_id, slug, vision_gita, aesthetic_gita, brand_spec, voice_gita, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO brand_kits (membership_id, slug, brand_spec, voice_gita, updated_at)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(membership_id, slug) DO UPDATE SET
-           vision_gita = excluded.vision_gita,
-           aesthetic_gita = excluded.aesthetic_gita,
            brand_spec = excluded.brand_spec,
            voice_gita = excluded.voice_gita,
            updated_at = excluded.updated_at`
-      ).bind(member, slug, kit.vision_gita, kit.aesthetic_gita, kit.brand_spec,
-             kit.voice_gita, updatedAt).run();
+      ).bind(member, slug, kit.brand_spec, kit.voice_gita, updatedAt).run();
     } catch (err) {
       console.error('D1 write error (brand_kits):', { message: err?.message });
       return json({ ok: false, error: 'Could not save your brand kit' }, 500);
