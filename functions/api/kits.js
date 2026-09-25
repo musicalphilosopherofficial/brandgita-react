@@ -130,8 +130,10 @@ export function sanitiseKit(body) {
   return { kit: out };
 }
 
-/** The licence key from an Authorization: Bearer header, or ''. */
-function bearer(request) {
+/** The licence key from an Authorization: Bearer header, or ''. Shared with the font-mirror
+ * read route (functions/api/fonts/[[path]].js) — same licence-in-bearer convention, no reason
+ * for a second copy of a four-line header parse. */
+export function bearer(request) {
   const header = request.headers.get('Authorization') || '';
   const m = /^Bearer\s+(.+)$/i.exec(header.trim());
   return m ? m[1].trim() : '';

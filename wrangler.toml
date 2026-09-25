@@ -11,6 +11,14 @@ database_id = "c0c56a08-861b-402b-813d-cd8734e8977a"
 binding = "SCHEDULE_BUCKET"
 bucket_name = "brandgita-scheduled"
 
+# The font mirror — private, read only through functions/api/fonts/[[path]].js's licence
+# check. No public dev-url on this bucket: see that route's header comment for why (the
+# founder's call, pre-launch, over the opposite stance the not-yet-merged
+# feature/font-r2-mirror branch took).
+[[r2_buckets]]
+binding = "FONTS_BUCKET"
+bucket_name = "brandgita-fonts"
+
 # ── Rate limiting — NOT configurable here ────────────────────────────────────
 # A [[ratelimits]] block was added and REMOVED on 2026-08-21. Wrangler rejects it for a
 # Pages project outright:
