@@ -2,7 +2,7 @@ import { mediaSlug, requireUserAuth } from '../_auth.js';
 
 const CORS_WRITE = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'PUT, GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'PUT, GET, HEAD, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -169,37 +169,97 @@ export async function onRequest(context) {
     return json({ ok: true, key });
   }
 
-  // ── GET — serve file from R2 (no auth — Meta fetches these URLs directly) ──
-  if (request.method === 'GET') {
+  // ── GET / HEAD — serve file from R2 (no auth — Meta fetches these URLs directly) ──
+  //
+  // HEAD and byte-Range are supported on purpose. Instagram's fetcher validates a video_url
+  // with HEAD and ranged GETs; a host that 405s HEAD and ignores Range can make a perfectly
+  // valid file fail with an opaque container status "ERROR" and no reason (the first real
+  // scheduled reel, 2026-10-02, failed exactly that way on a file ffprobe showed was fine).
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    const baseHeaders = {
+      // nosniff + attachment-style disposition: even if a non-media object
+      // somehow exists, the browser won't execute it as HTML/JS on our origin.
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Disposition': 'inline',
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+      // no-store: never cache user video at Cloudflare edges. Keeps the asset
+      // resident only in the Oceania R2 bucket and makes the privacy policy's
+      // "deleted immediately after publish" promise literally true.
+      'Cache-Control': 'private, no-store',
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
+    };
+
+    let range = null;
+    let head;
+    try {
+      head = await env.SCHEDULE_BUCKET.head(key);
+    } catch (err) {
+      console.error('R2 head error:', { message: err?.message });
+      return json({ ok: false, error: 'Storage read failed' }, 500);
+    }
+    if (head === null || head === undefined) {
+      return json({ ok: false, error: 'Not found' }, 404);
+    }
+    const contentType = head.httpMetadata?.contentType || 'application/octet-stream';
+    const size = head.size;
+
+    if (request.method === 'HEAD') {
+      return new Response(null, {
+        status: 200,
+        headers: { ...baseHeaders, 'Content-Type': contentType, 'Content-Length': String(size) },
+      });
+    }
+
+    const rangeHeader = request.headers.get('Range');
+    const m = rangeHeader && /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+    if (m && (m[1] !== '' || m[2] !== '')) {
+      let start;
+      let end;
+      if (m[1] === '') {
+        const suffix = Number(m[2]);
+        start = Math.max(0, size - suffix);
+        end = size - 1;
+      } else {
+        start = Number(m[1]);
+        end = m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1);
+      }
+      if (start >= size || start > end) {
+        return new Response(null, {
+          status: 416,
+          headers: { ...baseHeaders, 'Content-Range': `bytes */${size}` },
+        });
+      }
+      range = { start, end };
+    }
+
     let obj;
     try {
-      obj = await env.SCHEDULE_BUCKET.get(key);
+      obj = range
+        ? await env.SCHEDULE_BUCKET.get(key, { range: { offset: range.start, length: range.end - range.start + 1 } })
+        : await env.SCHEDULE_BUCKET.get(key);
     } catch (err) {
       console.error('R2 get error:', { message: err?.message });
       return json({ ok: false, error: 'Storage read failed' }, 500);
     }
-
-    if (obj === null) {
+    if (obj === null || obj === undefined) {
       return json({ ok: false, error: 'Not found' }, 404);
     }
 
-    const contentType = obj.httpMetadata?.contentType || 'application/octet-stream';
-
+    if (range) {
+      return new Response(obj.body, {
+        status: 206,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': contentType,
+          'Content-Range': `bytes ${range.start}-${range.end}/${size}`,
+          'Content-Length': String(range.end - range.start + 1),
+        },
+      });
+    }
     return new Response(obj.body, {
       status: 200,
-      headers: {
-        'Content-Type': contentType,
-        // nosniff + attachment-style disposition: even if a non-media object
-        // somehow exists, the browser won't execute it as HTML/JS on our origin.
-        'X-Content-Type-Options': 'nosniff',
-        'Content-Disposition': 'inline',
-        'Content-Security-Policy': "default-src 'none'; sandbox",
-        // no-store: never cache user video at Cloudflare edges. Keeps the asset
-        // resident only in the Oceania R2 bucket and makes the privacy policy's
-        // "deleted immediately after publish" promise literally true.
-        'Cache-Control': 'private, no-store',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: { ...baseHeaders, 'Content-Type': contentType, 'Content-Length': String(size) },
     });
   }
 
