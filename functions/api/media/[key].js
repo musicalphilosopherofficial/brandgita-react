@@ -8,12 +8,12 @@ const CORS_WRITE = {
 
 // Hard ceiling per uploaded object. IG reels cap well under this; the limit
 // exists to stop a valid token from streaming terabytes into R2 (cost bomb).
-const MAX_BYTES = 600 * 1024 * 1024; // 600 MB
+export const MAX_BYTES = 600 * 1024 * 1024; // 600 MB
 
 // Only real media may be stored. Blocks turning the bucket — which is served
 // from the apex domain via GET — into an arbitrary-content / HTML / JS host
 // (stored-XSS on brandgita.com, malware distribution under the brand).
-const ALLOWED_CONTENT_TYPES = new Set([
+export const ALLOWED_CONTENT_TYPES = new Set([
   'video/mp4',
   'video/quicktime',
   'image/jpeg',
@@ -34,7 +34,7 @@ const ALLOWED_CONTENT_TYPES = new Set([
 // The readable form is `<song>-by-<artist>-<20 hex>`; the words are decoration and the
 // 20 hex chars carry all 80 bits. `{1,60}` is bounded on purpose — an unbounded
 // character class in front of a fixed-width group is a backtracking trap.
-const KEY_SHAPE =
+export const KEY_SHAPE =
   /^([0-9]+|[a-z-]{1,60}-[0-9a-f]{20}|[0-9a-f]{20})\/(reel|cover|carousel)\/[A-Za-z0-9._-]+\.(mp4|mov|jpg|jpeg|png)$/;
 
 function json(data, status = 200) {
