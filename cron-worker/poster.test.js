@@ -316,7 +316,7 @@ test('reel with a cover_key: cover_url is derived from it via mediaUrl', async (
 
   makeFetchMock([
     [isCreate, (u, opts, body) => {
-      assert.equal(body.get('cover_url'), `${MEDIA_BASE}/covers/frame1.jpg`, 'cover_key must produce a cover_url via mediaUrl');
+      assert.equal(body.get('cover_url'), `${MEDIA_BASE}/covers%2Fframe1.jpg`, 'cover_key must produce a cover_url via mediaUrl (key is ONE encoded segment — contract change 2026-10-02, see util.mediaurl.test.js)');
       return jsonOk({ id: 'container-1' });
     }],
     [isPollStatus, () => jsonOk({ status_code: 'FINISHED' })],
@@ -424,7 +424,7 @@ test('carousel happy path: N children -> parent -> publish -> permalink -> poste
   await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
 
   assert.equal(createdChildIds.length, 3, 'one child container per asset');
-  assert.deepEqual(seenChildImageUrls, assetKeys.map((k) => `${MEDIA_BASE}/${k}`), 'each child gets its own asset key mediaUrl');
+  assert.deepEqual(seenChildImageUrls, assetKeys.map((k) => `${MEDIA_BASE}/${encodeURIComponent(k)}`), 'each child gets its own asset key mediaUrl (one encoded segment — contract change 2026-10-02)');
   assert.equal(state.posts['post-1'].status, 'posted');
   assert.equal(state.posts['post-1'].permalink, 'https://www.instagram.com/p/def456/');
 });
@@ -445,7 +445,7 @@ test('mixed carousel: a .mp4 child is a VIDEO container that must FINISH before 
     [(u, opts, body) => isCreate(u, opts) && body.get('media_type') === 'VIDEO' && body.get('is_carousel_item') === 'true', (u, opts, body) => {
       log.push('video-child');
       assert.equal(u, mediaCreateUrl(igUserId));
-      assert.equal(body.get('video_url'), `${MEDIA_BASE}/mix/u-0.mp4`, 'video child must carry its own video_url');
+      assert.equal(body.get('video_url'), `${MEDIA_BASE}/mix%2Fu-0.mp4`, 'video child must carry its own video_url');
       assert.equal(body.get('image_url'), null, 'a video child must never set image_url');
       return jsonOk({ id: 'vchild' });
     }],
@@ -454,7 +454,7 @@ test('mixed carousel: a .mp4 child is a VIDEO container that must FINISH before 
     // then the image child
     [(u, opts, body) => isCreate(u, opts) && body.get('is_carousel_item') === 'true' && body.get('media_type') === null, (u, opts, body) => {
       log.push('image-child');
-      assert.equal(body.get('image_url'), `${MEDIA_BASE}/mix/u-1.jpg`);
+      assert.equal(body.get('image_url'), `${MEDIA_BASE}/mix%2Fu-1.jpg`);
       assert.equal(body.get('media_type'), null, 'an image child sets image_url only');
       return jsonOk({ id: 'ichild' });
     }],

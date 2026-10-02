@@ -32,13 +32,11 @@ export function nowIso() {
 // infrastructure any platform's adapter needs — a public URL for the asset
 // it's about to publish — not just an Instagram fact.
 export function mediaUrl(key, mediaBase = MEDIA_BASE) {
-  // key may contain slashes (e.g. "user123/clip.mp4"); encode each segment so
-  // the path stays valid while preserving the directory structure.
-  const encoded = String(key)
-    .split('/')
-    .map((seg) => encodeURIComponent(seg))
-    .join('/');
-  return `${mediaBase}/${encoded}`;
+  // The WHOLE key is one path segment (slashes become %2F): functions/api/media/[key].js
+  // matches a single segment, so literal slashes fall through to the site's index.html and
+  // Instagram is handed HTML instead of a video (container status ERROR, no reason — the first
+  // real scheduled reel, 2026-10-02). Same shape as the desktop's upload_url.
+  return `${mediaBase}/${encodeURIComponent(String(key))}`;
 }
 
 // ---------------------------------------------------------------------------
