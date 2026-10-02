@@ -11,7 +11,7 @@ const OWNER = 'ig-owner-1';
 // Fake D1: dispatches on the SQL text. Auth's ig_tokens lookup always resolves to
 // OWNER with a fresh token; the scheduled_posts SELECT returns whatever `post` we
 // seed; UPDATEs are recorded into `updates`.
-function makeEnv({ post = null } = {}) {
+function makeEnv({ post = null, existing = [] } = {}) {
   const bucketCalls = [];
   const updates = [];
   const env = {
@@ -42,13 +42,15 @@ function makeEnv({ post = null } = {}) {
     SCHEDULE_BUCKET: {
       delete: async (key) => { bucketCalls.push(key); },
       put: async (key) => { bucketCalls.push(key); },
+      // head() is a READ (does the replacement already exist in R2?), so it is not recorded as a storage write.
+      head: async (key) => (existing.includes(key) ? { key } : null),
     },
   };
   return { env, bucketCalls, updates };
 }
 
-function ctx(body, { id = 'post-1', post = null, auth = 'Bearer tok' } = {}) {
-  const { env, bucketCalls, updates } = makeEnv({ post });
+function ctx(body, { id = 'post-1', post = null, auth = 'Bearer tok', existing = [] } = {}) {
+  const { env, bucketCalls, updates } = makeEnv({ post, existing });
   const context = {
     env,
     params: { id },
@@ -66,6 +68,10 @@ const scheduledPost = (over = {}) => ({
   ig_user_id: OWNER,
   status: 'scheduled',
   caption: 'original caption',
+  platform: 'ig',
+  type: 'reel',
+  asset_keys: JSON.stringify([`${OWNER}/reel.mp4`]),
+  cover_key: `${OWNER}/cover.jpg`,
   ...over,
 });
 
@@ -173,17 +179,76 @@ test('post_at at day 25 (within 30-day horizon) → ok', async () => {
   assert.equal(updates.length, 1);
 });
 
-test('body containing asset_keys → 400, row unchanged', async () => {
-  const { context, updates } = ctx(
-    { post_at: futureISO(2), asset_keys: ['x/a.mp4'] },
-    { post: scheduledPost() }
+// Audit 2026-10-02 (founder: "all things that can be updated via api must be added"): asset_keys and cover_key are now
+// patchable, under the SAME checks a new post gets (account prefix, the platform contract, the object already in R2). The old
+// 'body containing asset_keys → 400' case pinned the narrow v1 contract; it is replaced by the cases below.
+test('patches cover_key: checks the new cover exists, updates the row, then deletes the replaced cover', async () => {
+  const { context, bucketCalls, updates } = ctx(
+    { cover_key: `${OWNER}/cover-v2.jpg` },
+    { post: scheduledPost(), existing: [`${OWNER}/cover-v2.jpg`] }
   );
   const res = await onRequest(context);
   const data = await res.json();
 
-  assert.equal(res.status, 400);
-  assert.match(data.error, /asset_keys/);
+  assert.equal(res.status, 200);
+  assert.equal(data.cover_key, `${OWNER}/cover-v2.jpg`);
+  assert.ok(updates[0].sql.includes('cover_key'));
+  assert.deepEqual(bucketCalls, [`${OWNER}/cover.jpg`], 'only the replaced cover is deleted, the video stays');
+});
+
+test("cover_key outside the caller's account → 403, row and storage unchanged", async () => {
+  const { context, bucketCalls, updates } = ctx(
+    { cover_key: 'someone-else/cover.jpg' },
+    { post: scheduledPost(), existing: ['someone-else/cover.jpg'] }
+  );
+  const res = await onRequest(context);
+  assert.equal(res.status, 403);
   assert.equal(updates.length, 0);
+  assert.equal(bucketCalls.length, 0);
+});
+
+test('cover_key not yet uploaded → 400, nothing deleted', async () => {
+  const { context, bucketCalls, updates } = ctx({ cover_key: `${OWNER}/never-uploaded.jpg` }, { post: scheduledPost() });
+  const res = await onRequest(context);
+  const data = await res.json();
+  assert.equal(res.status, 400);
+  assert.match(data.error, /not uploaded/);
+  assert.equal(updates.length, 0);
+  assert.equal(bucketCalls.length, 0);
+});
+
+test('asset_keys swap obeys the platform contract (a reel needs exactly 1 asset)', async () => {
+  const keys = [`${OWNER}/a.mp4`, `${OWNER}/b.mp4`];
+  const { context, updates } = ctx({ asset_keys: keys }, { post: scheduledPost(), existing: keys });
+  const res = await onRequest(context);
+  const data = await res.json();
+  assert.equal(res.status, 400);
+  assert.match(data.error, /exactly 1 asset/);
+  assert.equal(updates.length, 0);
+});
+
+test('asset_keys swap: the new video replaces the old one, which is deleted after the update', async () => {
+  const { context, bucketCalls, updates } = ctx(
+    { asset_keys: [`${OWNER}/reel-v2.mp4`] },
+    { post: scheduledPost(), existing: [`${OWNER}/reel-v2.mp4`] }
+  );
+  const res = await onRequest(context);
+  const data = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual(data.asset_keys, [`${OWNER}/reel-v2.mp4`]);
+  assert.ok(updates[0].sql.includes('asset_keys'));
+  assert.deepEqual(bucketCalls, [`${OWNER}/reel.mp4`]);
+});
+
+test('type, platform and id stay fixed → 400', async () => {
+  for (const field of ['type', 'platform', 'id', 'ig_user_id']) {
+    const { context, updates } = ctx({ [field]: 'x' }, { post: scheduledPost() });
+    const res = await onRequest(context);
+    const data = await res.json();
+    assert.equal(res.status, 400, field);
+    assert.match(data.error, new RegExp(field));
+    assert.equal(updates.length, 0);
+  }
 });
 
 test('unknown key in body → 400', async () => {
@@ -212,13 +277,23 @@ test('caption over 2200 chars → 400', async () => {
   assert.equal(updates.length, 0);
 });
 
-test('post_at missing → 400', async () => {
-  const { context } = ctx({ caption: 'only caption' }, { post: scheduledPost() });
+// Audit 2026-10-02: post_at is no longer required (a cover or caption can change without moving the post); an EMPTY patch is
+// still a 400, so a client that sends nothing hears about it.
+test('caption alone, without post_at → ok, post_at untouched', async () => {
+  const { context, updates } = ctx({ caption: 'only caption' }, { post: scheduledPost() });
   const res = await onRequest(context);
   const data = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(data.caption, 'only caption');
+  assert.ok(!updates[0].sql.includes('post_at'));
+});
 
+test('empty patch → 400', async () => {
+  const { context } = ctx({}, { post: scheduledPost() });
+  const res = await onRequest(context);
+  const data = await res.json();
   assert.equal(res.status, 400);
-  assert.match(data.error, /post_at is required/);
+  assert.match(data.error, /nothing to update/);
 });
 
 test('non-existent id → 404', async () => {

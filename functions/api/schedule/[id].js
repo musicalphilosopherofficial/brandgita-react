@@ -1,4 +1,5 @@
 import { requireUserAuth } from '../_auth.js';
+import { contractFor } from '../../../shared/platform-contracts.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -121,10 +122,15 @@ export async function onRequest(context) {
   return json({ ok: true });
 }
 
-// ── PATCH /api/schedule/{id} — reschedule (and optionally re-caption) in place ──
-// A NARROW patch: move a post's post_at, without re-uploading its media. Touches
-// D1 only — never R2. Swapping media is deliberately rejected (that's a different
-// post the cron worker never validated). See PATCH_SCHEDULE_SPEC.md.
+// ── PATCH /api/schedule/{id} — change a scheduled post in place ──
+// Every field a scheduled post can change without becoming a different post: post_at, caption, cover_key, asset_keys (same type,
+// same platform). Founder 2026-10-02: "all things that can be updated via api must be added" — a new cover used to cost a full
+// re-upload of the video (DELETE wipes R2, POST needs fresh assets). A swapped key passes the SAME checks a new post gets: the
+// caller's account prefix, the platform contract, and the object already in R2. The replaced objects are deleted from R2 only
+// AFTER the row update succeeds, so a failed update never strands a post without its media. id, type, platform and the owner
+// stay fixed. See PATCH_SCHEDULE_SPEC.md.
+const PATCHABLE = new Set(['post_at', 'caption', 'cover_key', 'asset_keys']);
+
 async function handlePatch(context) {
   const { request, env, params } = context;
 
@@ -145,47 +151,46 @@ async function handlePatch(context) {
     return json({ ok: false, error: 'Body must be a JSON object' }, 400);
   }
 
-  // Whitelist the keys we accept. Anything else — including the explicitly
-  // forbidden asset_keys/type/cover_key/id/ig_user_id — is a 400, not a silent
-  // no-op, so a client-side typo surfaces instead of hiding.
-  const ALLOWED = new Set(['post_at', 'caption']);
+  // Unknown or fixed keys are a 400, not a silent no-op, so a client-side typo surfaces instead of hiding.
   for (const key of Object.keys(body)) {
-    if (!ALLOWED.has(key)) {
-      return json({ ok: false, error: `Unexpected field: ${key}` }, 400);
+    if (!PATCHABLE.has(key)) {
+      return json({ ok: false, error: `Unexpected field: ${key} (patchable: ${[...PATCHABLE].join(', ')})` }, 400);
     }
   }
-
-  const { post_at, caption } = body;
-
-  if (post_at === undefined) {
-    return json({ ok: false, error: 'post_at is required' }, 400);
+  const fields = Object.keys(body);
+  if (fields.length === 0) {
+    return json({ ok: false, error: `nothing to update (patchable: ${[...PATCHABLE].join(', ')})` }, 400);
   }
 
-  const postAtMs = Date.parse(post_at);
-  if (typeof post_at !== 'string' || isNaN(postAtMs)) {
-    return json({ ok: false, error: 'post_at must be a valid ISO 8601 date string' }, 400);
+  const { post_at, caption, cover_key, asset_keys } = body;
+
+  if (post_at !== undefined) {
+    const postAtMs = Date.parse(post_at);
+    if (typeof post_at !== 'string' || isNaN(postAtMs)) {
+      return json({ ok: false, error: 'post_at must be a valid ISO 8601 date string' }, 400);
+    }
+    const nowMs = Date.now();
+    if (postAtMs <= nowMs) {
+      return json({ ok: false, error: 'post_at must be in the future' }, 400);
+    }
+    if (postAtMs > nowMs + RESCHEDULE_HORIZON_MS) {
+      return json({ ok: false, error: 'post_at cannot be more than 30 days in the future' }, 400);
+    }
+  }
+  if (caption !== undefined && typeof caption !== 'string') {
+    return json({ ok: false, error: 'caption must be a string' }, 400);
+  }
+  if (cover_key !== undefined && typeof cover_key !== 'string') {
+    return json({ ok: false, error: 'cover_key must be a string' }, 400);
+  }
+  if (asset_keys !== undefined && (!Array.isArray(asset_keys) || asset_keys.length === 0)) {
+    return json({ ok: false, error: 'asset_keys must be a non-empty array' }, 400);
   }
 
-  const nowMs = Date.now();
-  if (postAtMs <= nowMs) {
-    return json({ ok: false, error: 'post_at must be in the future' }, 400);
-  }
-  if (postAtMs > nowMs + RESCHEDULE_HORIZON_MS) {
-    return json({ ok: false, error: 'post_at cannot be more than 30 days in the future' }, 400);
-  }
-
-  // caption is optional; when present it obeys the same bound POST enforces.
-  const patchCaption = caption !== undefined;
-  if (patchCaption && (typeof caption !== 'string' || caption.length > 2200)) {
-    return json({ ok: false, error: 'caption must be a string up to 2200 characters' }, 400);
-  }
-
-  // Fetch the post to check ownership + status. caption is selected so we can
-  // echo the effective value back when the caller didn't change it.
   let post;
   try {
     post = await env.DB.prepare(
-      `SELECT id, ig_user_id, status, caption FROM scheduled_posts WHERE id = ?`
+      `SELECT id, ig_user_id, status, caption, post_at, platform, type, asset_keys, cover_key FROM scheduled_posts WHERE id = ?`
     )
       .bind(id)
       .first();
@@ -197,41 +202,101 @@ async function handlePatch(context) {
   if (!post) {
     return json({ ok: false, error: 'Post not found' }, 404);
   }
-
   // Ownership — 404 not 403, so we never leak that another user's post exists.
   if (post.ig_user_id !== ig_user_id) {
     return json({ ok: false, error: 'Post not found' }, 404);
   }
-
-  // Only a still-scheduled post may be moved. A post mid-flight or done must not
-  // have its time changed under the cron worker.
+  // Only a still-scheduled post may change. A post mid-flight or done must not change under the cron worker.
   if (post.status !== 'scheduled') {
-    return json(
-      { ok: false, error: `Cannot reschedule a post that is already ${post.status}` },
-      409
-    );
+    return json({ ok: false, error: `Cannot change a post that is already ${post.status}` }, 409);
   }
 
-  const effectiveCaption = patchCaption ? caption : post.caption;
+  let oldAssets = [];
+  try {
+    oldAssets = JSON.parse(post.asset_keys || '[]');
+  } catch {
+    console.error(`Malformed asset_keys for post ${id}:`, post.asset_keys);
+  }
+  const effective = {
+    caption: caption !== undefined ? caption : post.caption,
+    asset_keys: asset_keys !== undefined ? asset_keys : oldAssets,
+  };
+
+  // The platform contract judges the post as it WILL be (type fixed; new assets, new caption), exactly as POST would.
+  let contract;
+  try {
+    contract = contractFor(post.platform || 'ig');
+  } catch (err) {
+    return json({ ok: false, error: err.message }, 400);
+  }
+  if (caption !== undefined || asset_keys !== undefined) {
+    const problems = contract.validateCreate({ type: post.type, asset_keys: effective.asset_keys, caption: effective.caption });
+    if (problems.length) {
+      return json({ ok: false, error: problems.join('; ') }, 400);
+    }
+  }
+
+  // New keys: the caller's account only (the cron serves them as public URLs), and already uploaded.
+  const newKeys = [...(asset_keys || []), ...(cover_key !== undefined ? [cover_key] : [])];
+  const prefix = `${ig_user_id}/`;
+  for (const k of newKeys) {
+    if (typeof k !== 'string' || !k.startsWith(prefix)) {
+      return json({ ok: false, error: 'all asset keys must belong to your account' }, 403);
+    }
+  }
+  for (const k of newKeys) {
+    let head = null;
+    try {
+      head = await env.SCHEDULE_BUCKET.head(k);
+    } catch (err) {
+      console.error(`R2 head error for key '${k}' (scheduled_posts PATCH):`, { message: err?.message });
+      return json({ ok: false, error: 'Could not check the new media in storage' }, 500);
+    }
+    if (!head) {
+      return json({ ok: false, error: `${k} is not uploaded yet: upload it first, then patch` }, 400);
+    }
+  }
+
+  const sets = [];
+  const binds = [];
+  if (post_at !== undefined) { sets.push('post_at = ?'); binds.push(post_at); }
+  if (caption !== undefined) { sets.push('caption = ?'); binds.push(caption); }
+  if (cover_key !== undefined) { sets.push('cover_key = ?'); binds.push(cover_key); }
+  if (asset_keys !== undefined) { sets.push('asset_keys = ?'); binds.push(JSON.stringify(asset_keys)); }
 
   try {
-    if (patchCaption) {
-      await env.DB.prepare(
-        `UPDATE scheduled_posts SET post_at = ?, caption = ? WHERE id = ?`
-      )
-        .bind(post_at, caption, id)
-        .run();
-    } else {
-      await env.DB.prepare(
-        `UPDATE scheduled_posts SET post_at = ? WHERE id = ?`
-      )
-        .bind(post_at, id)
-        .run();
-    }
+    await env.DB.prepare(`UPDATE scheduled_posts SET ${sets.join(', ')} WHERE id = ?`)
+      .bind(...binds, id)
+      .run();
   } catch (err) {
     console.error('D1 update error (scheduled_posts PATCH):', { message: err?.message });
-    return json({ ok: false, error: 'Could not reschedule post' }, 500);
+    return json({ ok: false, error: 'Could not update post' }, 500);
   }
 
-  return json({ ok: true, id, post_at, caption: effectiveCaption });
+  // Replaced media leaves R2 only now that the row points at its successor. Best effort: the row is already right.
+  const keep = new Set([...effective.asset_keys, cover_key !== undefined ? cover_key : post.cover_key]);
+  const replaced = [
+    ...(asset_keys !== undefined ? oldAssets : []),
+    ...(cover_key !== undefined && post.cover_key ? [post.cover_key] : []),
+  ].filter((k) => !keep.has(k));
+  const deleteErrors = [];
+  for (const key of replaced) {
+    try {
+      await env.SCHEDULE_BUCKET.delete(key);
+    } catch (err) {
+      console.error(`R2 delete error for replaced key '${key}':`, { message: err?.message });
+      deleteErrors.push(key);
+    }
+  }
+
+  const out = {
+    ok: true,
+    id,
+    post_at: post_at !== undefined ? post_at : post.post_at,
+    caption: effective.caption,
+    cover_key: cover_key !== undefined ? cover_key : post.cover_key,
+    asset_keys: effective.asset_keys,
+  };
+  if (deleteErrors.length) out.warning = `Updated, but some replaced media could not be removed from storage: ${deleteErrors.join(', ')}`;
+  return json(out);
 }
