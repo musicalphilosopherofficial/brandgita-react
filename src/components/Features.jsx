@@ -11,28 +11,32 @@ const features = [
     desc: 'One interview. Your brand on file — no re-briefing, ever.',
   },
   {
-    title: 'Video processing',
-    desc: 'Background noise removed, silences cut, audio cleaned up — ready to publish.',
+    title: 'Style profiles',
+    desc: 'Save your favourite carousel look, and every new post follows it.',
   },
   {
-    title: 'Short-form video',
-    desc: 'Vertical clips cut and branded from your long-form video.',
-  },
-  {
-    title: 'Instagram carousels',
+    title: 'Carousels',
     desc: 'On-brand slides built from your content — no Canva required.',
   },
   {
+    title: 'Content bank',
+    desc: 'Every idea stored in one place — your content plans are made from it.',
+  },
+  {
+    title: 'Education asset carousels',
+    desc: 'Turn your expertise into diagram-supported carousels.',
+  },
+  {
+    title: 'Life-moment carousels',
+    desc: 'Your photos and videos from your life, turned into personal story carousels.',
+  },
+  {
     title: 'Captions',
-    desc: 'Word-by-word captions styled to your brand.',
+    desc: 'Captions written in your voice for every post.',
   },
   {
     title: 'Direct publishing',
-    desc: 'Publish to YouTube and Instagram — no third-party scheduler.',
-  },
-  {
-    title: 'Thumbnails',
-    desc: 'On-brand thumbnail generated for every video — no design tool required.',
+    desc: 'Publish to all your social platforms — no third-party scheduler.',
   },
 ]
 
@@ -69,7 +73,7 @@ export default function Features() {
           Coming soon
         </span>
         <span style={{ fontSize: '0.8rem', fontWeight: 300, color: '#6E6B62', lineHeight: 1.5 }}>
-          TikTok publishing &nbsp;·&nbsp; LinkedIn carousels &nbsp;·&nbsp; Newsletter &nbsp;·&nbsp; Analytics &nbsp;·&nbsp; Motion graphic reels
+          Video editing &amp; short-form clips &nbsp;·&nbsp; Reels style profiles &nbsp;·&nbsp; Video publishing &nbsp;·&nbsp; Thumbnails &nbsp;·&nbsp; LinkedIn carousels &nbsp;·&nbsp; Newsletter &nbsp;·&nbsp; Analytics
         </span>
       </div>
     </div>

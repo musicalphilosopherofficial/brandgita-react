@@ -24,7 +24,7 @@ export default function Hero() {
         marginBottom: '1.5rem',
         maxWidth: 720,
       }}>
-        Turn a single video into a week of content — edited and styled to who you are.
+        In 1 hour, turn your long-form content into 30 days of on-brand carousels, published on all social media platforms.
       </h1>
 
       <p style={{
@@ -36,15 +36,15 @@ export default function Hero() {
         maxWidth: 580,
         marginBottom: 0,
       }}>
-        You show up on camera because you have something real to say — and you want your content to prove it.
+        You have real expertise and real stories to tell — and you want your content to prove it.
         <br /><br />
         Every AI tool you've tried strips your voice out and hands you something polished but generic.{' '}
-        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Hours of editing. Same generic look. No life, no flavour.</strong>
+        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Your feed ends up looking like everyone else's — and nobody stops scrolling.</strong>
         <br /><br />
-        Brand Gita runs a one-time brand interview — then every clip, carousel, and caption it produces sounds and looks like you — not like the tool.{' '}
-        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>No prompting. No templates. Just review and publish.</strong>
+        Brand Gita runs a one-time brand interview — then every carousel and caption it produces sounds and looks like you — not like the tool.{' '}
+        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>No prompting. Style profiles lock in your look. Just review and publish.</strong>
         <br /><br />
-        When you are ready, Brand Gita posts your finished videos and carousels to your own Instagram, YouTube and TikTok accounts — only when you confirm each post.
+        Brand Gita publishes your carousels to your own social accounts — only when you confirm each post. Video is coming soon.
       </p>
     </section>
   )

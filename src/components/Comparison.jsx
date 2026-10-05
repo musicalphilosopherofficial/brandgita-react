@@ -47,14 +47,15 @@ export default function Comparison() {
           One interview. Every piece of content, forever.
         </p>
         <ul style={{ margin: 0, padding: 0 }}>
-          <ListItem><B>No editing skills needed</B></ListItem>
-          <ListItem>Brand voice captured in a <B>one-time interview</B> — <B>every clip inherits it, no re-briefing, ever</B></ListItem>
-          <ListItem><B>Applied to every piece of content, forever</B></ListItem>
-          <ListItem><B>Mirrors you more with every session</B></ListItem>
-          <ListItem><B>Batch record once</B>, publish for months</ListItem>
+          <ListItem><B>No design skills needed</B></ListItem>
+          <ListItem>Brand voice captured in a <B>one-time interview</B> — <B>every carousel inherits it, no re-briefing, ever</B></ListItem>
+          <ListItem><B>Style profiles lock in your look</B> — every new post follows it</ListItem>
+          <ListItem><B>1 hour of long-form</B> becomes <B>30 days of content</B></ListItem>
+          <ListItem><B>Content bank</B> keeps every idea — your content plans are made from it</ListItem>
           <ListItem>Recommends what to post — <B>you always have the final say</B></ListItem>
-          <ListItem>Clips, carousels, captions — <B>all on-brand</B></ListItem>
-          <ListItem><B>No manual uploads</B> — <B>auto schedules and publishes to Instagram</B>; YouTube uploads for you, one tap to go live</ListItem>
+          <ListItem>Carousels, captions — <B>all on-brand</B></ListItem>
+          <ListItem>Your own photos and videos, <B>turned into personal story carousels</B></ListItem>
+          <ListItem><B>No manual uploads</B> — <B>auto schedules and publishes to all your social platforms</B>, one tap to go live</ListItem>
         </ul>
       </div>
 
@@ -68,12 +69,13 @@ export default function Comparison() {
           <li style={{ fontSize: '0.8rem', fontWeight: 300, color: '#6E6B62', lineHeight: 1.5, padding: '0.28rem 0', listStyle: 'none' }}>
             <B>Generic output</B> — sounds like the tool, not like you
           </li>
-          <ListItem><B>Hours of editing</B> — or hours of prompting — same result</ListItem>
-          <ListItem>Output <B>sounds like everyone else</B> no matter what you try</ListItem>
-          <ListItem><B>One video in, one video out</B> — repurposing is a separate job</ListItem>
+          <ListItem><B>Hours spent editing and repurposing</B> — or hours of prompting — same result</ListItem>
+          <ListItem>Output <B>looks like everyone else</B> no matter what you try</ListItem>
+          <ListItem><B>One video in, one post out</B> — repurposing is a separate job</ListItem>
+          <ListItem><B>Ideas scattered</B> across notes, chats and screenshots</ListItem>
           <ListItem><B>Rebuild your preferences</B> from scratch every session</ListItem>
-          <ListItem><B>Upload, edit, re-download, publish</B> — four steps, every time</ListItem>
-          <ListItem>Outsource editing — <B>train them, they leave, start over</B></ListItem>
+          <ListItem><B>Design, export, re-upload, publish</B> — four steps, every time</ListItem>
+          <ListItem><B>Hiring editors and freelancers</B> — train them, they leave, start over</ListItem>
         </ul>
       </div>
 

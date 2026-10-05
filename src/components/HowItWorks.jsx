@@ -6,18 +6,18 @@ const STEPS = [
   },
   {
     number: '02',
-    title: 'Shoot your video',
-    body: 'Record normally. No script. No teleprompter. No second shooting schedule for short-form. Just talk.',
+    title: 'Record or choose',
+    body: 'Record a voice note, or choose from your own YouTube videos. No script. No teleprompter. Just talk.',
   },
   {
     number: '03',
     title: 'Review with Brand Gita',
-    body: 'Everything happens in front of you. Have a conversation, review changes — no prompting needed if you don\'t want to.',
+    body: 'Everything happens in front of you. Have a conversation, review changes — no prompting needed. Style profiles lock in your style.',
   },
   {
     number: '04',
     title: 'Publish',
-    body: 'Long-form edited, clips cut, carousels built, captions written — published direct to YouTube and Instagram.',
+    body: 'Carousels built and captions written — published direct to all your social platforms. Video is coming soon.',
   },
 ]
 

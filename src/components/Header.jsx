@@ -1,5 +1,5 @@
 export default function Header() {
-  const link = { color: '#4A4842', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 500 }
+  const link = { color: '#2196F3', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 500 }
   return (
     <header
       style={{
@@ -14,7 +14,7 @@ export default function Header() {
         borderBottom: '1px solid #D0CBC0',
       }}
     >
-      <a href="/" style={{ color: '#1A1A18', textDecoration: 'none', fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.01em' }}>
+      <a href="/" style={{ color: '#2196F3', textDecoration: 'none', fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.01em' }}>
         Brand Gita
       </a>
       <nav aria-label="Main" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.25rem' }}>

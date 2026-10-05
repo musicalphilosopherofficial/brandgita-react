@@ -17,7 +17,7 @@ const faqs = [
   },
   {
     q: 'What platforms does it publish to?',
-    a: 'YouTube and Instagram in V1, directly — no third-party scheduler. TikTok and LinkedIn carousels are coming next.',
+    a: 'All your social platforms in V1, directly — no third-party scheduler. Long-form to short-form video is coming next.',
   },
   {
     q: 'What do I need to get started?',
