@@ -50,7 +50,7 @@ export default function Comparison() {
           <ListItem><B>No design skills needed</B></ListItem>
           <ListItem>Brand voice captured in a <B>one-time interview</B> — <B>every carousel inherits it, no re-briefing, ever</B></ListItem>
           <ListItem><B>Style profiles lock in your look</B> — every new post follows it</ListItem>
-          <ListItem><B>1 hour of long-form</B> becomes <B>30 days of content</B></ListItem>
+          <ListItem><B>Raw ideas and long-form</B> become <B>30 days of content</B></ListItem>
           <ListItem><B>Content bank</B> keeps every idea — your content plans are made from it</ListItem>
           <ListItem>Recommends what to post — <B>you always have the final say</B></ListItem>
           <ListItem>Carousels, captions — <B>all on-brand</B></ListItem>

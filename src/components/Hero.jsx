@@ -24,7 +24,7 @@ export default function Hero() {
         marginBottom: '1.5rem',
         maxWidth: 720,
       }}>
-        In 1 hour, turn your long-form content into 30 days of on-brand carousels, published on all social media platforms.
+        Turn your raw ideas and long-form content into 30 days of on-brand carousels, published on all social media platforms.
       </h1>
 
       <p style={{
