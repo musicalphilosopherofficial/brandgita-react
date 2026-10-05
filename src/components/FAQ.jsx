@@ -9,7 +9,7 @@ const faqs = [
   },
   {
     q: 'Do you use your own AI or mine?',
-    a: 'Yours. Brand Gita works with Claude (via a CLI subscription) or OpenRouter in V1. For Claude, a Pro subscription is the minimum; Max is recommended for heavy editing sessions. For OpenRouter, you bring your own API key and pay per use.',
+    a: 'Yours. Brand Gita works with Claude in V1 — through the Claude API or the Claude CLI.',
   },
   {
     q: 'What is the brand interview?',
