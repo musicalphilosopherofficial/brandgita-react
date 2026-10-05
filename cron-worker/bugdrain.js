@@ -301,7 +301,14 @@ async function createGithubIssue(env, doFetch, row, parsed) {
         expected: parsed.expected,
         diagnostics: parsed.diagnostics,
       }),
-      labels: [TYPE_LABEL[row.report_type] || 'bug', 'from-app'],
+      // `system-alert` marks a report the platform raised about itself (shared/failure-audit.js —
+      // a post that exhausted its retries), so the founder's alerting routine can find them
+      // without reading creator-filed reports.
+      labels: [
+        TYPE_LABEL[row.report_type] || 'bug',
+        'from-app',
+        ...(parsed.diagnostics && parsed.diagnostics.source === 'system' ? ['system-alert'] : []),
+      ],
     }),
   });
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 200)}`);

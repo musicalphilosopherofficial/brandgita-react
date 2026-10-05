@@ -600,3 +600,30 @@ test('nothing pending is a clean no-op', async () => {
   assert.equal(res.synced, 0);
   assert.equal(res.failed, 0);
 });
+
+// ---------------------------------------------------------------------------
+// System-raised reports (a post that failed permanently — shared/failure-audit.js) get a
+// `system-alert` GitHub label so the founder's alerting routine can find them; reports a creator
+// filed by hand never carry it.
+// ---------------------------------------------------------------------------
+
+test('a system-raised report is labelled system-alert; a creator report is not', async () => {
+  const labelsFor = async (payload) => {
+    const e = env({ DB: fakeDB([{ ...ROW, payload: JSON.stringify(payload) }]) });
+    let labels = null;
+    const fetch = async (url, init) => {
+      if (url.includes('api.github.com')) labels = JSON.parse(init.body).labels;
+      return { ok: true, status: 200, json: async () => ({ html_url: 'u', id: 'p' }), text: async () => '' };
+    };
+    await drainBugReports(e, { fetch });
+    return labels;
+  };
+  const sys = await labelsFor({
+    untrusted_user_input: { summary: 'post failed' },
+    diagnostics: { source: 'system', kind: 'post_failure', post_id: 'p1' },
+  });
+  assert.ok(sys.includes('system-alert'), JSON.stringify(sys));
+  assert.ok(sys.includes('from-app'));
+  const human = await labelsFor({ untrusted_user_input: { summary: 'grade went yellow' }, diagnostics: { os: 'darwin' } });
+  assert.equal(human.includes('system-alert'), false);
+});

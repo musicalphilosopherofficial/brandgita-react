@@ -29,6 +29,8 @@ import { drainBugReports } from './bugdrain.js';
 import { adapterFor, ADAPTERS } from './platforms/index.js';
 import { DEFAULT_PLATFORM, contractFor } from '../shared/platform-contracts.js';
 import { runDataRetentionPurge } from '../shared/data-retention.js';
+import { purgePostedMedia } from '../shared/media-retention.js';
+import { raisePostFailure } from '../shared/failure-audit.js';
 import { MEDIA_BASE, countRows } from './util.js';
 
 // Container processing poll configuration (reels are transcoded async by Meta).
@@ -104,6 +106,25 @@ async function markFailed(env, id, errorText) {
   ).bind(errorText, id).run();
 }
 
+// Permanent failure that the founder must see: records it, then raises it into the bug_reports
+// queue (Notion page + GitHub issue via the drain). Never throws — raisePostFailure swallows its
+// own errors. Token expiry deliberately does NOT use this: it is a creator-actionable state the
+// desktop already surfaces, not a fault to ticket.
+async function failPermanently(env, post, errorText) {
+  await markFailed(env, post.id, errorText);
+  await raisePostFailure(env, post, errorText);
+}
+
+// Remember that Instagram has published this post. Best-effort by design: the post is already
+// live, and a bookkeeping write must never turn that into a failure.
+async function saveMediaId(env, postId, mediaId) {
+  try {
+    await env.DB.prepare(`UPDATE scheduled_posts SET ig_media_id = ? WHERE id = ?`).bind(mediaId, postId).run();
+  } catch (err) {
+    console.error(`Post ${postId}: could not save ig_media_id ${mediaId}:`, { message: err?.message });
+  }
+}
+
 // Transient failure — increment retry_count and requeue (or permanently fail on
 // the final attempt). `currentRetryCount` is the value read from the row BEFORE
 // this attempt.
@@ -117,6 +138,7 @@ async function handleRetryableFailure(env, post, errorText) {
       `UPDATE scheduled_posts SET status = 'failed', retry_count = ?, error = ? WHERE id = ?`
     ).bind(next, errorText, post.id).run();
     console.error(`Post ${post.id} permanently failed after ${next} attempts: ${errorText}`);
+    await raisePostFailure(env, { ...post, retry_count: next }, errorText);
   } else {
     // Requeue for the next cron run.
     await env.DB.prepare(
@@ -163,14 +185,14 @@ async function processPost(
   } catch (err) {
     // Unknown platform — not retryable, there is no adapter to retry with.
     console.error(`Post ${post.id} [platform=${platform}] unknown platform:`, err.message);
-    await markFailed(env, post.id, err.message);
+    await failPermanently(env, post, err.message);
     return;
   }
 
   const credsResult = await adapter.loadCredentials(env, post);
   if (!credsResult.ok) {
     if (credsResult.permanent) {
-      await markFailed(env, post.id, credsResult.error);
+      await failPermanently(env, post, credsResult.error);
     } else {
       await handleRetryableFailure(env, post, credsResult.error);
     }
@@ -183,7 +205,7 @@ async function processPost(
     assetKeys = JSON.parse(post.asset_keys);
     if (!Array.isArray(assetKeys)) throw new Error('asset_keys is not an array');
   } catch (err) {
-    await markFailed(env, post.id, `Invalid asset_keys JSON: ${err.message}`);
+    await failPermanently(env, post, `Invalid asset_keys JSON: ${err.message}`);
     return;
   }
 
@@ -196,7 +218,7 @@ async function processPost(
   const contract = contractFor(platform);
   if (!contract.contentTypes.includes(post.type)) {
     // Unknown type — not retryable.
-    await markFailed(env, post.id, `Unknown post type: ${post.type}`);
+    await failPermanently(env, post, `Unknown post type: ${post.type}`);
     return;
   }
 
@@ -205,7 +227,7 @@ async function processPost(
       post,
       assetKeys,
       creds: credsResult.creds,
-      deps: { mediaBase, sleepFn, pollIntervalMs, pollMaxMs },
+      deps: { mediaBase, sleepFn, pollIntervalMs, pollMaxMs, onMediaPublished: (mediaId) => saveMediaId(env, post.id, mediaId) },
     });
 
     await markPosted(env, post.id, permalink);
@@ -336,6 +358,14 @@ export default {
         if (purged.length) console.log('data-retention', JSON.stringify(purged));
       } catch (err) {
         console.error('data-retention: unhandled', { message: err?.message });
+      }
+      // Posted media is deleted 7 days after it posts. Its own try/catch for the same reason as
+      // above: one purge failing must never stop the other.
+      try {
+        const media = await purgePostedMedia(env);
+        if (media.purged || media.failed) console.log('media-retention', JSON.stringify(media));
+      } catch (err) {
+        console.error('media-retention: unhandled', { message: err?.message });
       }
       return;
     }

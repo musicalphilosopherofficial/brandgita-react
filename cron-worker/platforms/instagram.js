@@ -131,16 +131,42 @@ async function waitForContainerReady(igUserId, creationId, accessToken, deps) {
   throw new IgApiError(`Container ${creationId} did not finish within ${pollMaxMs / 1000}s`);
 }
 
+// How many times to look up a just-published post's permalink. Instagram can answer
+// "Media ID is not available" for a few seconds after media_publish returns an id.
+const PERMALINK_ATTEMPTS = 4;
+const PERMALINK_RETRY_MS = 3000;
+
+// Look up a PUBLISHED media's permalink, retrying while Instagram propagates it. Never publishes.
+async function fetchPermalink(mediaId, accessToken, deps = {}) {
+  const sleepFn = deps.sleepFn || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  let lastErr;
+  for (let attempt = 1; attempt <= PERMALINK_ATTEMPTS; attempt++) {
+    try {
+      const permaRes = await igGet(mediaId, 'permalink', accessToken);
+      return permaRes.permalink || null;
+    } catch (err) {
+      lastErr = err;
+      // An expired/invalid token will not heal by waiting — let the dispatcher see it now.
+      if (err && err.code === 190) throw err;
+      if (attempt < PERMALINK_ATTEMPTS) await sleepFn(PERMALINK_RETRY_MS);
+    }
+  }
+  throw lastErr;
+}
+
 // Publish a finished container and return its permalink.
-async function publishAndGetPermalink(igUserId, creationId, accessToken) {
+//
+// The media id is handed to deps.onMediaPublished (persisted by the poster) the instant
+// media_publish returns it and BEFORE the permalink lookup: from that moment the post is LIVE,
+// and a retry must never publish again (see publishPost's ig_media_id short-circuit).
+async function publishAndGetPermalink(igUserId, creationId, accessToken, deps = {}) {
   const publishRes = await igPost(`${igUserId}/media_publish`, { creation_id: creationId }, accessToken);
   const mediaId = publishRes.id;
   if (!mediaId) {
     throw new IgApiError(`media_publish returned no media id for container ${creationId}`);
   }
-
-  const permaRes = await igGet(mediaId, 'permalink', accessToken);
-  return permaRes.permalink || null;
+  if (deps.onMediaPublished) await deps.onMediaPublished(mediaId);
+  return fetchPermalink(mediaId, accessToken, deps);
 }
 
 // REEL: create container -> poll -> publish -> permalink.
@@ -170,7 +196,7 @@ async function postReel(post, assetKeys, accessToken, deps) {
   // Reels are transcoded asynchronously; wait for FINISHED before publishing.
   await waitForContainerReady(igUserId, creationId, accessToken, deps);
 
-  return publishAndGetPermalink(igUserId, creationId, accessToken);
+  return publishAndGetPermalink(igUserId, creationId, accessToken, deps);
 }
 
 // CAROUSEL: create one child container per item (image OR video — the kind rides in the R2 key
@@ -239,7 +265,7 @@ async function postCarousel(post, assetKeys, accessToken, deps) {
   }
 
   // 4. Publish and return the permalink.
-  return publishAndGetPermalink(igUserId, carouselId, accessToken);
+  return publishAndGetPermalink(igUserId, carouselId, accessToken, deps);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +300,12 @@ export const instagram = Object.freeze({
   // dispatcher (poster.js) decides retry vs permanent via isAuthExpired below.
   async publish({ post, assetKeys, creds, deps }) {
     const { accessToken } = creds;
+    // Already published by an earlier attempt that died before it could record the permalink:
+    // the post is live. Fetch the link only — creating a container and publishing again would
+    // post a duplicate.
+    if (post.ig_media_id) {
+      return { permalink: await fetchPermalink(post.ig_media_id, accessToken, deps) };
+    }
     let permalink;
     if (post.type === 'reel') {
       permalink = await postReel(post, assetKeys, accessToken, deps);
