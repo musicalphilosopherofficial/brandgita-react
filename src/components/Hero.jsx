@@ -44,7 +44,7 @@ export default function Hero() {
         Brand Gita runs a one-time brand interview — then every carousel and caption it produces sounds and looks like you — not like the tool.{' '}
         <strong style={{ fontWeight: 600, color: '#1A1A18' }}>No prompting. Style profiles lock in your look. Just review and publish.</strong>
         <br /><br />
-        Brand Gita publishes your carousels to your own social accounts — only when you confirm each post. Video is coming soon.
+        Brand Gita publishes your finished videos and photo carousels to your own TikTok, Instagram and YouTube accounts, only when you review and confirm each post.
       </p>
     </section>
   )

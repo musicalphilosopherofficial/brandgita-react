@@ -19,7 +19,9 @@ export default function Header() {
         Brand Gita
       </a>
       <nav aria-label="Main" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.25rem' }}>
+        <a href="/features" style={link}>Features</a>
         <a href="/#how-it-works" style={link}>How it works</a>
+        <a href="/about" style={link}>About</a>
         <a href="/privacy-policy" style={link}>Privacy</a>
         <a href="/terms" style={link}>Terms</a>
         <a href="/data-deletion" style={link}>Data deletion</a>

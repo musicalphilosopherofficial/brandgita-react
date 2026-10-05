@@ -126,7 +126,7 @@ export default function Checkout({ email, name, claimToken }) {
 
           <ul style={listStyle}>
             {[
-              'Free founding access before public launch',
+              'Free founding access',
               'First in line when access opens',
               'Everything happens in front of you — no black box',
               'A direct line to shape what we build — all we ask is honest feedback',

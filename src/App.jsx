@@ -33,7 +33,7 @@ function ApplyCTA() {
         fontSize: '0.9rem', color: '#4A4842', textAlign: 'center',
         fontWeight: 300, lineHeight: 1.6, marginBottom: '1.5rem', maxWidth: 420,
       }}>
-        A small group of founding creators get free early access before public launch — in exchange for honest feedback.
+        Founding creators get free access to Brand Gita — in exchange for honest feedback.
       </p>
       <a
         href="/apply"
