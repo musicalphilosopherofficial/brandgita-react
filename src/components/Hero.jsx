@@ -63,7 +63,7 @@ export default function Hero() {
         maxWidth: 560,
         marginBottom: '0.6rem',
       }}>
-        Turn the moments you&rsquo;ve lived and the expertise you&rsquo;ve built into carousels that sound like you.
+        Turn the moments you&rsquo;ve lived and the expertise you&rsquo;ve built into carousels that look like you.
       </p>
       <p style={{
         fontSize: '0.95rem',
