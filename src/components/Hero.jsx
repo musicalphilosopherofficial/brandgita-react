@@ -40,7 +40,7 @@ export default function Hero() {
         <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Brand Gita turns those real moments into personal story carousels</strong>, and turns your expertise and long-form content into education slides built on your own ideas.
         <br /><br />
         In the age of AI, people trust what feels real.{' '}
-        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Personal stories and genuine expertise are the best way to build trust with your audience</strong> — and every post ends with a clear call to action that sends them back to your long-form content or your offer page. On Instagram that can be a comment-to-DM call to action — "comment GUIDE and I'll send it to you" — that collects emails in exchange for your lead magnet.
+        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Personal stories and genuine expertise are the best way to build trust with your audience</strong> — and every post ends with a clear call to action that sends them back to your long-form content or your offer page. On Instagram that can be a comment-to-DM call to action — "comment GUIDE and I'll send it to you" — that you pair with the DM tool you already use to collect emails in exchange for your lead magnet.
         <br /><br />
         Every AI tool you've tried strips your voice out and hands you something polished but generic.{' '}
         <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Your feed ends up looking like everyone else's — and nobody stops scrolling.</strong>
