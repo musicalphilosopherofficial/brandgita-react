@@ -5,6 +5,7 @@ import Features from './components/Features'
 import FounderQuote from './components/FounderQuote'
 import Comparison from './components/Comparison'
 import Footer from './components/Footer'
+import Header from './components/Header'
 import FAQ from './components/FAQ'
 import HowItWorks from './components/HowItWorks'
 
@@ -53,6 +54,7 @@ function ApplyCTA() {
 export default function App() {
   return (
     <div className="page">
+      <Header />
       <AnimatedBanner />
 
       <Hero />
@@ -61,7 +63,7 @@ export default function App() {
 
       <hr className="page-divider" />
 
-      <p className="section-label">How it works</p>
+      <p className="section-label" id="how-it-works">How it works</p>
       <HowItWorks />
 
       <hr className="page-divider" />
