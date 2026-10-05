@@ -9,7 +9,7 @@ const BLOCK_STYLE = {
 const BLOCKS = [
   {
     title: 'Real moments, real stories',
-    body: 'Your phone footage and lived experience, turned into personal story carousels.',
+    body: 'Your vacations, personal moments and life highlights — all the footage you already have — turned into personal story carousels.',
   },
   {
     title: 'Expertise that teaches',
