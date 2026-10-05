@@ -14,9 +14,12 @@ export default function Header() {
         borderBottom: '1px solid #D0CBC0',
       }}
     >
-      <a href="/" style={{ color: '#2196F3', textDecoration: 'none', fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.01em', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-        <img src="/favicon.png" alt="" width="28" height="28" style={{ borderRadius: 6, display: 'block' }} />
-        Brand Gita
+      <a href="/" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.6rem' }}>
+        <img src="/favicon.png" alt="" width="34" height="34" style={{ borderRadius: 6, display: 'block' }} />
+        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+          <span style={{ color: '#2196F3', fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.01em' }}>Brand Gita</span>
+          <span style={{ color: '#1A1A18', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.16em', textTransform: 'uppercase' }}>Your Personal Brand Salon</span>
+        </span>
       </a>
       <nav aria-label="Main" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.25rem' }}>
         <a href="/features" style={link}>Features</a>

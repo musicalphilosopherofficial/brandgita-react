@@ -1,8 +1,10 @@
 /* Brand Gita — shared marketing-page styles (features, about) */
 .site-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1.5rem; padding-bottom: 0.9rem; margin-bottom: 2rem; border-bottom: 1px solid #D0CBC0; }
 .site-header .brand { display: inline-flex; align-items: center; gap: 0.5rem; color: #2196F3; text-decoration: none; font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; }
-.site-header .brand img { width: 28px; height: 28px; border-radius: 6px; display: block; }
+.site-header .brand img { width: 34px; height: 34px; border-radius: 6px; display: block; }
 .site-header nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; }
 .site-header nav a { color: #2196F3; text-decoration: none; font-size: 0.85rem; font-weight: 500; }
 .site-header nav a:hover, .site-header nav a[aria-current="page"] { text-decoration: underline; }
 .lead { font-size: 1.05rem; color: #4A4842; margin-bottom: 1.5rem; }
+.site-header .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+.site-header .brand-tag { color: #1A1A18; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
