@@ -21,7 +21,7 @@ const BLOCKS = [
   },
   {
     title: 'Traffic that comes back to you',
-    body: 'Every post ends with a call to action to your long-form content or offer page. Pair a comment-to-DM call to action with your own DM tool to collect emails for a lead magnet.',
+    body: 'Every post is built so people want to click through — to your offer page, lead magnet or VSL.',
   },
 ]
 
