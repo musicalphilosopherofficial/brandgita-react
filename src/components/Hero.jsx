@@ -1,3 +1,30 @@
+const BLOCK_STYLE = {
+  background: '#F4F0E8',
+  border: '1px solid #D8D3C8',
+  borderRadius: 6,
+  padding: '1rem 1.1rem',
+  textAlign: 'left',
+}
+
+const BLOCKS = [
+  {
+    title: 'Real moments, real stories',
+    body: 'Your phone footage and lived experience, turned into personal story carousels.',
+  },
+  {
+    title: 'Expertise that teaches',
+    body: 'Education slides built from your ideas and long-form content.',
+  },
+  {
+    title: 'Trust in the age of AI',
+    body: 'People trust what feels real. Authentic stories and genuine expertise build that trust.',
+  },
+  {
+    title: 'Traffic that comes back to you',
+    body: 'Every post ends with a call to action to your long-form content or offer page. Pair a comment-to-DM call to action with your own DM tool to collect emails for a lead magnet.',
+  },
+]
+
 export default function Hero() {
   return (
     <section style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '3.5rem' }}>
@@ -28,28 +55,42 @@ export default function Hero() {
       </h1>
 
       <p style={{
-        fontSize: '1rem',
+        fontSize: '1.05rem',
         fontWeight: 300,
-        lineHeight: 1.72,
+        lineHeight: 1.65,
         color: '#4A4842',
         textAlign: 'center',
-        maxWidth: 580,
-        marginBottom: 0,
+        maxWidth: 560,
+        marginBottom: '0.6rem',
       }}>
-        Your best content is already in your life — the footage on your phone, the moments you lived, the lessons you earned.{' '}
-        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Brand Gita turns those real moments into personal story carousels</strong>, and turns your expertise and long-form content into education slides built on your own ideas.
-        <br /><br />
-        In the age of AI, people trust what feels real.{' '}
-        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Personal stories and genuine expertise are the best way to build trust with your audience</strong> — and every post ends with a clear call to action that sends them back to your long-form content or your offer page. On Instagram that can be a comment-to-DM call to action — "comment GUIDE and I'll send it to you" — that you pair with the DM tool you already use to collect emails in exchange for your lead magnet.
-        <br /><br />
-        Every AI tool you've tried strips your voice out and hands you something polished but generic.{' '}
-        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>Your feed ends up looking like everyone else's — and nobody stops scrolling.</strong>
-        <br /><br />
-        Brand Gita runs a one-time brand interview — then every carousel and caption it produces sounds and looks like you — not like the tool.{' '}
-        <strong style={{ fontWeight: 600, color: '#1A1A18' }}>No prompting. Style profiles lock in your look. Just review and publish.</strong>
-        <br /><br />
+        Turn the moments you&rsquo;ve lived and the expertise you&rsquo;ve built into carousels that sound like you.
+      </p>
+      <p style={{
+        fontSize: '0.95rem',
+        fontWeight: 300,
+        lineHeight: 1.65,
+        color: '#6E6B62',
+        textAlign: 'center',
+        maxWidth: 560,
+        marginBottom: '2rem',
+      }}>
         Brand Gita publishes your finished videos and photo carousels to your own TikTok, Instagram and YouTube accounts, only when you review and confirm each post.
       </p>
+
+      <div style={{
+        width: '100%',
+        maxWidth: 760,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: '0.75rem',
+      }}>
+        {BLOCKS.map((b) => (
+          <div key={b.title} style={BLOCK_STYLE}>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1A1A18', marginBottom: '0.3rem', letterSpacing: '-0.01em' }}>{b.title}</h3>
+            <p style={{ fontSize: '0.85rem', fontWeight: 300, lineHeight: 1.55, color: '#4A4842', margin: 0 }}>{b.body}</p>
+          </div>
+        ))}
+      </div>
     </section>
   )
 }
