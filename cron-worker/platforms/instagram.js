@@ -231,9 +231,14 @@ async function postCarousel(post, assetKeys, accessToken, deps) {
     throw new IgApiError('Carousel container creation returned no id');
   }
 
-  // 3. Publish and return the permalink. (Image carousels are typically ready
-  // immediately; media_publish will surface a not-ready error if not, which is
-  // retried by the outer handler.)
+  // 3. A carousel with a video child is processed asynchronously like a reel: publishing the parent the moment it is created answers
+  // "Media ID is not available" (the P1 multi-video post failed at its slot this way, 2026-10-05, and every retry repeated the race).
+  // Wait for the PARENT to reach FINISHED first. An image-only carousel is ready immediately, so it skips the wait.
+  if (assetKeys.some((k) => /\.mp4$/i.test(k))) {
+    await waitForContainerReady(igUserId, carouselId, accessToken, deps);
+  }
+
+  // 4. Publish and return the permalink.
   return publishAndGetPermalink(igUserId, carouselId, accessToken);
 }
 

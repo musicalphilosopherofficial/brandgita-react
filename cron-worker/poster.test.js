@@ -450,7 +450,12 @@ test('mixed carousel: a .mp4 child is a VIDEO container that must FINISH before 
       return jsonOk({ id: 'vchild' });
     }],
     // its readiness poll must land BEFORE the parent is assembled
-    [isPollStatus, (u) => { log.push('poll'); assert.match(u, /\/vchild\?/); return jsonOk({ status_code: 'FINISHED' }); }],
+    // Audit trail (2026-10-05): the PARENT of a carousel with a video child must also reach FINISHED before media_publish. The P1 multi-video post
+    // failed at its slot with "Media ID is not available" because the parent was published the moment it was created.
+    [isPollStatus, (u) => {
+      if (/\/vchild\?/.test(u)) { log.push('poll'); return jsonOk({ status_code: 'FINISHED' }); }
+      assert.match(u, /\/carousel-parent-1\?/); log.push('parent-poll'); return jsonOk({ status_code: 'FINISHED' });
+    }],
     // then the image child
     [(u, opts, body) => isCreate(u, opts) && body.get('is_carousel_item') === 'true' && body.get('media_type') === null, (u, opts, body) => {
       log.push('image-child');
@@ -469,8 +474,8 @@ test('mixed carousel: a .mp4 child is a VIDEO container that must FINISH before 
 
   await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
 
-  assert.deepEqual(log, ['video-child', 'poll', 'image-child', 'parent', 'publish', 'permalink'],
-    'the video child container must reach FINISHED before the parent carousel is created');
+  assert.deepEqual(log, ['video-child', 'poll', 'image-child', 'parent', 'parent-poll', 'publish', 'permalink'],
+    'the video child must reach FINISHED before the parent is created, and the parent must reach FINISHED before it is published');
   assert.equal(state.posts['post-1'].status, 'posted');
   assert.equal(state.posts['post-1'].permalink, 'https://www.instagram.com/p/mix1/');
 });
