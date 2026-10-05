@@ -14,7 +14,8 @@ export default function Header() {
         borderBottom: '1px solid #D0CBC0',
       }}
     >
-      <a href="/" style={{ color: '#2196F3', textDecoration: 'none', fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.01em' }}>
+      <a href="/" style={{ color: '#2196F3', textDecoration: 'none', fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.01em', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+        <img src="/favicon.png" alt="" width="28" height="28" style={{ borderRadius: 6, display: 'block' }} />
         Brand Gita
       </a>
       <nav aria-label="Main" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.25rem' }}>
