@@ -56,13 +56,20 @@ export function resolveRedirectUri(value) {
   return /^http:\/\/127\.0\.0\.1:\d{2,5}\/callback\/$/.test(value) ? value : null;
 }
 
-export function authorizeUrl(state, env, redirectUri = REDIRECT_URI) {
+export function authorizeUrl(state, env, redirectUri = REDIRECT_URI, codeChallenge = '') {
   const u = new URL('https://www.tiktok.com/v2/auth/authorize/');
   u.searchParams.set('client_key', env.TIKTOK_CLIENT_KEY);
   u.searchParams.set('scope', SCOPES.join(','));
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('state', state);
+  // PKCE (desktop clients). The CLIENT creates the verifier and computes the challenge in the
+  // format TikTok requires; this side only passes both through and never sees the verifier
+  // until the exchange.
+  if (codeChallenge) {
+    u.searchParams.set('code_challenge', codeChallenge);
+    u.searchParams.set('code_challenge_method', 'S256');
+  }
   return u.toString();
 }
 
@@ -80,10 +87,11 @@ async function tokenCall(params, fetchImpl) {
   return data;
 }
 
-export const exchangeCode = (code, env, fetchImpl = fetch, redirectUri = REDIRECT_URI) =>
+export const exchangeCode = (code, env, fetchImpl = fetch, redirectUri = REDIRECT_URI, codeVerifier = '') =>
   tokenCall({
     client_key: env.TIKTOK_CLIENT_KEY, client_secret: env.TIKTOK_CLIENT_SECRET,
     code, grant_type: 'authorization_code', redirect_uri: redirectUri,
+    ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
   }, fetchImpl);
 
 export const refreshAccess = (refreshToken, env, fetchImpl = fetch) =>

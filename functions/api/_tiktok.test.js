@@ -156,3 +156,16 @@ test('exchangeCode and authorizeUrl use the redirect URI they are given (desktop
   await exchangeCode('C', env, f, lb);
   assert.equal(new URLSearchParams(calls[0].init.body).get('redirect_uri'), lb);
 });
+
+test('PKCE passes through: the challenge goes on the authorize URL, the verifier on the exchange', async () => {
+  const u = new URL(authorizeUrl('S', env, REDIRECT_URI, 'abc123'));
+  assert.equal(u.searchParams.get('code_challenge'), 'abc123');
+  assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
+  assert.equal(new URL(authorizeUrl('S', env)).searchParams.get('code_challenge'), null);
+  const { f, calls } = record({ access_token: 'a', refresh_token: 'r', expires_in: 1, refresh_expires_in: 1, open_id: 'o' });
+  await exchangeCode('C', env, f, REDIRECT_URI, 'verifier-xyz');
+  assert.equal(new URLSearchParams(calls[0].init.body).get('code_verifier'), 'verifier-xyz');
+  const g = record({ access_token: 'a', refresh_token: 'r', expires_in: 1, refresh_expires_in: 1, open_id: 'o' });
+  await exchangeCode('C', env, g.f);
+  assert.equal(new URLSearchParams(g.calls[0].init.body).get('code_verifier'), null);
+});

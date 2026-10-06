@@ -159,3 +159,13 @@ test('desktop loopback: auth-url and exchange accept the app\'s own redirect, no
   assert.equal(sent.get('redirect_uri'), lb);
   assert.equal((await call(env, 'exchange', { method: 'POST', body: { code: 'C', state, redirect_uri: 'http://evil.example.com/callback/' } })).status, 400);
 });
+
+test('PKCE: auth-url forwards code_challenge and exchange forwards code_verifier', async () => {
+  const env = makeEnv();
+  const data = await (await call(env, 'auth-url', { query: '?code_challenge=deadbeef' })).json();
+  assert.equal(new URL(data.url).searchParams.get('code_challenge'), 'deadbeef');
+  tiktokReplies['/v2/oauth/token/'] = { access_token: 'A', refresh_token: 'R', expires_in: 86400, refresh_expires_in: 31536000, open_id: 'o' };
+  await call(env, 'exchange', { method: 'POST', body: { code: 'C', state: await signState('mem_1', env), code_verifier: 'ver' } });
+  const sent = new URLSearchParams(tiktokCalls.find((c) => c.url.includes('/v2/oauth/token/')).init.body);
+  assert.equal(sent.get('code_verifier'), 'ver');
+});

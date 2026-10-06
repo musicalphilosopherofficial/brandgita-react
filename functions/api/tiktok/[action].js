@@ -95,7 +95,7 @@ export async function onRequest(context) {
     if (action === 'auth-url' && request.method === 'GET') {
       const redirectUri = resolveRedirectUri(url.searchParams.get('redirect_uri'));
       if (!redirectUri) return json({ ok: false, error: 'Unsupported redirect_uri' }, 400);
-      return json({ ok: true, url: authorizeUrl(await signState(member, env), env, redirectUri) });
+      return json({ ok: true, url: authorizeUrl(await signState(member, env), env, redirectUri, url.searchParams.get('code_challenge') || '') });
     }
 
     if (action === 'exchange' && request.method === 'POST') {
@@ -108,7 +108,7 @@ export async function onRequest(context) {
       }
       const redirectUri = resolveRedirectUri(body.redirect_uri);
       if (!redirectUri) return json({ ok: false, error: 'Unsupported redirect_uri' }, 400);
-      const tokens = await exchangeCode(body.code, env, fetch, redirectUri);
+      const tokens = await exchangeCode(body.code, env, fetch, redirectUri, typeof body.code_verifier === 'string' ? body.code_verifier : '');
       const info = await fetchUserInfo(tokens.access_token);
       await saveConnection(env, member, tokens, info.display_name);
       return json({ ok: true, display_name: info.display_name || null });
