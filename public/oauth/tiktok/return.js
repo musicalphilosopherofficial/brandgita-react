@@ -6,30 +6,6 @@
       try { state = JSON.parse(p.get('state') || '{}'); } catch (_) {}
       var port  = state.port || 9878;
 
-      // Web connection: the state was minted by /api/tiktok/auth-url ("w1." prefix). Finish the
-      // exchange server-side with the licence saved in this browser, then go back to the app.
-      var rawState = p.get('state') || '';
-      if (rawState.indexOf('w1.') === 0) {
-        var t = document.getElementById('title'), st = document.getElementById('subtitle'), bt = document.getElementById('open-btn');
-        bt.style.display = 'none';
-        t.textContent = 'Finishing up…'; st.textContent = '';
-        var lic = ''; try { lic = localStorage.getItem('bg_licence') || ''; } catch (_) {}
-        if (!code || !lic) {
-          t.textContent = 'Not connected.';
-          st.innerHTML = 'Open <a href="/app/tiktok/">Publish to TikTok</a> and try again.';
-          return;
-        }
-        fetch('/api/tiktok/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + lic }, body: JSON.stringify({ code: code, state: rawState }) })
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (!d.ok) throw new Error(d.error || 'failed');
-            t.textContent = 'TikTok connected.'; st.textContent = 'Taking you back…';
-            setTimeout(function () { location.replace('/app/tiktok/'); }, 800);
-          })
-          .catch(function (e) { t.textContent = 'Could not connect.'; st.innerHTML = (e.message || 'Try again') + ' — <a href="/app/tiktok/">go back</a>.'; });
-        return;
-      }
-
       if (!code && !error) return;
 
       var btn      = document.getElementById('open-btn');
