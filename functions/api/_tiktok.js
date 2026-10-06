@@ -45,12 +45,23 @@ export async function verifyState(state, env, now = Date.now()) {
   return { ok: true, membershipId };
 }
 
-export function authorizeUrl(state, env) {
+/** Which redirect URI a connection uses: the registered web page (default), or the desktop
+ * app's own loopback (`http://127.0.0.1:<port>/callback/`, registered with TikTok as a
+ * wildcard-port loopback entry). Anything else is refused so a caller cannot send the
+ * authorization code to a host of its choosing. The same value must be used for the authorize
+ * request and the token exchange — TikTok compares them. */
+export function resolveRedirectUri(value) {
+  if (!value) return REDIRECT_URI;
+  if (value === REDIRECT_URI) return REDIRECT_URI;
+  return /^http:\/\/127\.0\.0\.1:\d{2,5}\/callback\/$/.test(value) ? value : null;
+}
+
+export function authorizeUrl(state, env, redirectUri = REDIRECT_URI) {
   const u = new URL('https://www.tiktok.com/v2/auth/authorize/');
   u.searchParams.set('client_key', env.TIKTOK_CLIENT_KEY);
   u.searchParams.set('scope', SCOPES.join(','));
   u.searchParams.set('response_type', 'code');
-  u.searchParams.set('redirect_uri', REDIRECT_URI);
+  u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('state', state);
   return u.toString();
 }
@@ -69,10 +80,10 @@ async function tokenCall(params, fetchImpl) {
   return data;
 }
 
-export const exchangeCode = (code, env, fetchImpl = fetch) =>
+export const exchangeCode = (code, env, fetchImpl = fetch, redirectUri = REDIRECT_URI) =>
   tokenCall({
     client_key: env.TIKTOK_CLIENT_KEY, client_secret: env.TIKTOK_CLIENT_SECRET,
-    code, grant_type: 'authorization_code', redirect_uri: REDIRECT_URI,
+    code, grant_type: 'authorization_code', redirect_uri: redirectUri,
   }, fetchImpl);
 
 export const refreshAccess = (refreshToken, env, fetchImpl = fetch) =>

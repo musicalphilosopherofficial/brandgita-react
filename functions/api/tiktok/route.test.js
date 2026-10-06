@@ -143,3 +143,19 @@ test('disconnect revokes at TikTok and deletes the stored row', async () => {
   assert.equal(rows.size, 0);
   assert.ok(tiktokCalls.some((c) => c.url.includes('/v2/oauth/revoke/')));
 });
+
+test('desktop loopback: auth-url and exchange accept the app\'s own redirect, nothing else', async () => {
+  const env = makeEnv();
+  const lb = 'http://127.0.0.1:9877/callback/';
+  const data = await (await call(env, 'auth-url', { query: `?redirect_uri=${encodeURIComponent(lb)}` })).json();
+  assert.equal(new URL(data.url).searchParams.get('redirect_uri'), lb);
+  assert.equal((await call(env, 'auth-url', { query: `?redirect_uri=${encodeURIComponent('http://evil.example.com/callback/')}` })).status, 400);
+
+  tiktokReplies['/v2/oauth/token/'] = { access_token: 'A', refresh_token: 'R', expires_in: 86400, refresh_expires_in: 31536000, open_id: 'o' };
+  const state = await signState('mem_1', env);
+  const res = await call(env, 'exchange', { method: 'POST', body: { code: 'C', state, redirect_uri: lb } });
+  assert.equal(res.status, 200);
+  const sent = new URLSearchParams(tiktokCalls.find((c) => c.url.includes('/v2/oauth/token/')).init.body);
+  assert.equal(sent.get('redirect_uri'), lb);
+  assert.equal((await call(env, 'exchange', { method: 'POST', body: { code: 'C', state, redirect_uri: 'http://evil.example.com/callback/' } })).status, 400);
+});

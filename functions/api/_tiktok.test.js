@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import {
   REDIRECT_URI, SCOPES, authorizeUrl, signState, verifyState,
   exchangeCode, refreshAccess, queryCreator, initVideoPost, initPhotoPost,
-  fetchStatus, revoke, isAllowedUploadUrl,
+  fetchStatus, revoke, isAllowedUploadUrl, resolveRedirectUri,
 } from './_tiktok.js';
 
 if (!globalThis.crypto) globalThis.crypto = crypto.webcrypto;
@@ -137,4 +137,22 @@ test('only TikTok upload hosts are accepted as an upload target', () => {
   assert.equal(isAllowedUploadUrl('https://evil.example.com/video/'), false);
   assert.equal(isAllowedUploadUrl('https://tiktokapis.com.evil.com/'), false);
   assert.equal(isAllowedUploadUrl('not a url'), false);
+});
+
+test('redirect URI: the web page, or the desktop loopback, and nothing else', () => {
+  assert.equal(resolveRedirectUri(undefined), REDIRECT_URI);
+  assert.equal(resolveRedirectUri(''), REDIRECT_URI);
+  assert.equal(resolveRedirectUri('http://127.0.0.1:9877/callback/'), 'http://127.0.0.1:9877/callback/');
+  assert.equal(resolveRedirectUri('http://127.0.0.1:51234/callback/'), 'http://127.0.0.1:51234/callback/');
+  for (const bad of ['http://evil.example.com/callback/', 'https://127.0.0.1:9877/callback/', 'http://127.0.0.1:9877/other/', 'http://127.0.0.1.evil.com:9877/callback/', 'http://localhost:9877/callback/', 'javascript:alert(1)']) {
+    assert.equal(resolveRedirectUri(bad), null, bad);
+  }
+});
+
+test('exchangeCode and authorizeUrl use the redirect URI they are given (desktop loopback)', async () => {
+  const lb = 'http://127.0.0.1:9877/callback/';
+  assert.equal(new URL(authorizeUrl('S', env, lb)).searchParams.get('redirect_uri'), lb);
+  const { f, calls } = record({ access_token: 'a', refresh_token: 'r', expires_in: 1, refresh_expires_in: 1, open_id: 'o' });
+  await exchangeCode('C', env, f, lb);
+  assert.equal(new URLSearchParams(calls[0].init.body).get('redirect_uri'), lb);
 });

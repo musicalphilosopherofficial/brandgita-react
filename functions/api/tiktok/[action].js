@@ -1,8 +1,9 @@
 /**
  * /api/tiktok/{action} — the web app's TikTok connection and posting routes.
  *
- *   GET  auth-url     → { url }  TikTok authorize URL, state signed for this membership
- *   POST exchange     { code, state } → stores encrypted tokens (called by /oauth/tiktok/)
+ *   GET  auth-url     ?redirect_uri= (optional) → { url }  TikTok authorize URL, state signed for this membership
+ *   POST exchange     { code, state, redirect_uri? } → stores encrypted tokens. The web page (/oauth/tiktok/)
+ *                     and the desktop app (its 127.0.0.1 loopback) both end here: the TOKEN LIVES IN THE CLOUD
  *   GET  me           → { connected, creator? }  account name + the options it allows
  *   POST post         → starts a direct post (video FILE_UPLOAD, or photos PULL_FROM_URL)
  *   PUT  upload       ?target=<TikTok upload_url> — forwards one chunk to TikTok
@@ -21,7 +22,7 @@ import { checkWhopLicense } from '../_whop.js';
 import { encryptToken, decryptToken } from '../_crypto.js';
 import {
   signState, verifyState, authorizeUrl, exchangeCode, refreshAccess, revoke,
-  queryCreator, initVideoPost, initPhotoPost, fetchStatus, fetchUserInfo, isAllowedUploadUrl,
+  queryCreator, initVideoPost, initPhotoPost, fetchStatus, fetchUserInfo, isAllowedUploadUrl, resolveRedirectUri,
 } from '../_tiktok.js';
 
 const CORS = {
@@ -92,7 +93,9 @@ export async function onRequest(context) {
 
   try {
     if (action === 'auth-url' && request.method === 'GET') {
-      return json({ ok: true, url: authorizeUrl(await signState(member, env), env) });
+      const redirectUri = resolveRedirectUri(url.searchParams.get('redirect_uri'));
+      if (!redirectUri) return json({ ok: false, error: 'Unsupported redirect_uri' }, 400);
+      return json({ ok: true, url: authorizeUrl(await signState(member, env), env, redirectUri) });
     }
 
     if (action === 'exchange' && request.method === 'POST') {
@@ -103,7 +106,9 @@ export async function onRequest(context) {
       if (!verified.ok || verified.membershipId !== member || !body.code) {
         return json({ ok: false, error: 'Invalid or expired connection request — start again' }, 400);
       }
-      const tokens = await exchangeCode(body.code, env);
+      const redirectUri = resolveRedirectUri(body.redirect_uri);
+      if (!redirectUri) return json({ ok: false, error: 'Unsupported redirect_uri' }, 400);
+      const tokens = await exchangeCode(body.code, env, fetch, redirectUri);
       const info = await fetchUserInfo(tokens.access_token);
       await saveConnection(env, member, tokens, info.display_name);
       return json({ ok: true, display_name: info.display_name || null });
