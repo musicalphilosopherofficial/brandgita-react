@@ -18,7 +18,7 @@
   </nav>
 
   <h1>Privacy Policy</h1>
-  <p class="last-updated">Effective date: 20 May 2026 · Last updated: 1 September 2026</p>
+  <p class="last-updated">Effective date: 20 May 2026 · Last updated: 7 October 2026</p>
 
   <h2>About This Policy</h2>
   <p>Brand Gita is a service created and operated by <strong>Utsav Dhruv Trivedi</strong>, Lower Hutt, New Zealand ("<strong>Brand Gita</strong>", "<strong>I</strong>", "<strong>me</strong>", or "<strong>my</strong>").</p>
@@ -86,7 +86,7 @@
   <ul>
     <li><strong>Name and email address</strong> — used to create and manage your account</li>
     <li><strong>Username</strong> — used to identify your account within the Services</li>
-    <li><strong>OAuth access tokens</strong> — your <strong>YouTube</strong> token is stored locally on your device only, inside your operating system's secure credential store. Your <strong>Instagram</strong> token is stored encrypted on Brand Gita's servers (Cloudflare D1), because scheduled posts must be published at the time you chose even when your computer is asleep or offline. Both are used solely to authenticate publishing actions on your behalf, and neither is shared with any third party.</li>
+    <li><strong>OAuth access tokens</strong> — your <strong>YouTube</strong> token is stored locally on your device only, inside your operating system's secure credential store. Your <strong>Instagram</strong> and <strong>TikTok</strong> tokens are stored encrypted on Brand Gita's servers (Cloudflare D1) — Instagram because scheduled posts must be published at the time you chose even when your computer is asleep or offline, and TikTok so that the token is held by our servers and not on your device. All of them are used solely to authenticate publishing actions on your behalf, and none is shared with any third party.</li>
     <li><strong>Support communications</strong> — descriptions of issues, screen recordings, or video excerpts you voluntarily submit when seeking assistance</li>
   </ul>
 
@@ -231,7 +231,7 @@
   <p>Remove or change your AI provider at any time through the app's Settings screen.</p>
 
   <h2>7. Social Media Logins</h2>
-  <p>The Services allow you to register and log in using your Google, Instagram, Facebook, or TikTok account. When you do, I receive limited profile information from that platform — typically your name, email address, and profile picture — along with an OAuth access token.</p>
+  <p>The Services allow you to connect your Google, Instagram, Facebook, or TikTok account so Brand Gita can publish on your behalf. When you do, I receive limited profile information from that platform — typically your name and profile picture (and, for some platforms, your email address) — along with an OAuth access token. A TikTok connection is used only to publish; it is not used to create or log in to a Brand Gita account.</p>
   <p><strong>OAuth tokens are stored only on your local device</strong> in your operating system's secure credential store. I do not upload, cache, or retain your tokens or credentials on any Brand Gita server.</p>
   <p>I use information received from social platforms only for the purposes described in this Policy. I do not control how those platforms independently collect or use your information and recommend you review their privacy policies.</p>
   <p>To disconnect a social account:</p>
@@ -258,7 +258,7 @@
   <p>Once published, your content on Instagram is governed by Meta's Privacy Policy and Terms of Service.</p>
 
   <h3>TikTok</h3>
-  <p>When you post a video to TikTok, Brand Gita sends your video directly from your device to TikTok's Content Posting API. Brand Gita's servers do not store or process your video. Before each post, Brand Gita asks TikTok for your account's posting settings and shows you your TikTok account name, a preview of the video, and the options your account allows. You choose who can see the post, whether to allow comments, Duet and Stitch, and whether the post promotes a brand (which TikTok labels as promotional content or a paid partnership); none of these are chosen for you. Nothing is sent to TikTok until you confirm the post. Brand Gita adds no watermark, logo or promotional text to your video. Until TikTok has approved Brand Gita to post publicly, TikTok limits posts made through Brand Gita to private visibility. Once posted, your content on TikTok is governed by TikTok's Terms of Service and Privacy Policy, and by TikTok's Music Usage Confirmation and, for paid partnerships, Branded Content Policy.</p>
+  <p>When you post a video to TikTok, Brand Gita sends your video from your device to TikTok's Content Posting API. The video passes through Brand Gita's servers (hosted on Cloudflare) in transit only; Brand Gita does not store it and does not process it beyond forwarding it to TikTok. Your TikTok access token is stored encrypted on Brand Gita's servers, and is deleted when you disconnect TikTok. Before each post, Brand Gita asks TikTok for your account's posting settings and shows you your TikTok account name, a preview of the video, and the options your account allows. You choose who can see the post, whether to allow comments, Duet and Stitch, and whether the post promotes a brand (which TikTok labels as promotional content or a paid partnership); none of these are chosen for you. Nothing is sent to TikTok until you confirm the post. Brand Gita adds no watermark, logo or promotional text to your video. Until TikTok has approved Brand Gita to post publicly, TikTok limits posts made through Brand Gita to private visibility. Once posted, your content on TikTok is governed by TikTok's Terms of Service and Privacy Policy, and by TikTok's Music Usage Confirmation and, for paid partnerships, Branded Content Policy.</p>
 
   <p>You are responsible for ensuring you have the rights to publish any content you submit through Brand Gita, and for reviewing the privacy policies of Instagram/Meta, YouTube/Google and TikTok.</p>
 
@@ -274,7 +274,7 @@
     <thead><tr><th>Data type</th><th>Retention period</th></tr></thead>
     <tbody>
       <tr><td>Account data (name, email, username)</td><td>Duration of account + 3 months after termination</td></tr>
-      <tr><td>OAuth tokens</td><td>YouTube: on your device only. Instagram: encrypted on Brand Gita's servers so scheduled posts can publish while your computer is off. Both deleted when you disconnect or uninstall.</td></tr>
+      <tr><td>OAuth tokens</td><td>YouTube: on your device only. Instagram and TikTok: encrypted on Brand Gita's servers (Cloudflare) — Instagram so scheduled posts can publish while your computer is off. Deleted when you disconnect.</td></tr>
       <tr><td>Video content — YouTube</td><td>Sent directly to Google's API; never stored on Brand Gita servers</td></tr>
       <tr><td>Video content — Instagram (scheduled)</td><td>Temporarily stored on Cloudflare R2 until Meta retrieves it at publish time; deleted immediately after successful publish or on failure, and automatically deleted within 75 days in all cases</td></tr>
       <tr><td>Instagram scheduling metadata</td><td>Stored on Brand Gita servers until the scheduled publish time; deleted after publish</td></tr>
