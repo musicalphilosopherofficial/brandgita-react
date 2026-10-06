@@ -86,7 +86,7 @@
   <ul>
     <li><strong>Name and email address</strong> — used to create and manage your account</li>
     <li><strong>Username</strong> — used to identify your account within the Services</li>
-    <li><strong>OAuth access tokens</strong> — your <strong>YouTube</strong> token is stored locally on your device only, inside your operating system's secure credential store. Your <strong>Instagram</strong> and <strong>TikTok</strong> tokens are stored encrypted on Brand Gita's servers (Cloudflare D1) — Instagram because scheduled posts must be published at the time you chose even when your computer is asleep or offline, and TikTok so that the token is held by our servers and not on your device. All of them are used solely to authenticate publishing actions on your behalf, and none is shared with any third party.</li>
+    <li><strong>OAuth access tokens</strong> — your <strong>YouTube</strong>, <strong>Instagram</strong> and <strong>TikTok</strong> tokens are stored encrypted on Brand Gita's servers (Cloudflare D1), so that long-lived credentials are not kept on your device. Instagram needs this because scheduled posts must be published at the time you chose even when your computer is asleep or offline. For YouTube, your device receives only a short-lived access token (valid for about an hour) in order to upload your video directly to YouTube. All of them are used solely to authenticate publishing actions on your behalf, and none is shared with any third party.</li>
     <li><strong>Support communications</strong> — descriptions of issues, screen recordings, or video excerpts you voluntarily submit when seeking assistance</li>
   </ul>
 
@@ -244,7 +244,7 @@
   <h2>7A. Publishing Video Content to Social Platforms</h2>
 
   <h3>YouTube</h3>
-  <p>When you publish or schedule a video to YouTube, Brand Gita sends your video and scheduled publish time directly to Google's YouTube Data API. YouTube handles the scheduling entirely on their infrastructure. Brand Gita's servers are not involved in storing or processing your video — it goes from your device to Google directly. Once published, your content is governed by Google's Privacy Policy and YouTube's Terms of Service.</p>
+  <p>When you publish or schedule a video to YouTube, Brand Gita sends your video and scheduled publish time directly to Google's YouTube Data API. YouTube handles the scheduling entirely on their infrastructure. Brand Gita's servers are not involved in storing or processing your video — it goes from your device to Google directly, using a short-lived access token that our servers issue from your encrypted YouTube connection. Once published, your content is governed by Google's Privacy Policy and YouTube's Terms of Service.</p>
 
   <h3>Instagram</h3>
   <p>Instagram's publishing API does not support client-side scheduling. When you schedule an Instagram post, Brand Gita's servers must store your scheduling request and call Meta's API at the time you specified. This means:</p>
@@ -274,7 +274,7 @@
     <thead><tr><th>Data type</th><th>Retention period</th></tr></thead>
     <tbody>
       <tr><td>Account data (name, email, username)</td><td>Duration of account + 3 months after termination</td></tr>
-      <tr><td>OAuth tokens</td><td>YouTube: on your device only. Instagram and TikTok: encrypted on Brand Gita's servers (Cloudflare) — Instagram so scheduled posts can publish while your computer is off. Deleted when you disconnect.</td></tr>
+      <tr><td>OAuth tokens</td><td>YouTube, Instagram and TikTok: encrypted on Brand Gita's servers (Cloudflare). Your device holds only a short-lived YouTube access token while uploading. Deleted when you disconnect.</td></tr>
       <tr><td>Video content — YouTube</td><td>Sent directly to Google's API; never stored on Brand Gita servers</td></tr>
       <tr><td>Video content — Instagram (scheduled)</td><td>Temporarily stored on Cloudflare R2 until Meta retrieves it at publish time; deleted immediately after successful publish or on failure, and automatically deleted within 75 days in all cases</td></tr>
       <tr><td>Instagram scheduling metadata</td><td>Stored on Brand Gita servers until the scheduled publish time; deleted after publish</td></tr>
