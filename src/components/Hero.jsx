@@ -21,7 +21,7 @@ const BLOCKS = [
   },
   {
     title: 'Traffic that comes back to you',
-    body: 'Every post is built so people want to click through — to your offer page, lead magnet or VSL.',
+    body: 'Every post is built so people want to click or comment through — to your offer page, lead magnet or VSL.',
   },
 ]
 
