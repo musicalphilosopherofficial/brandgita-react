@@ -232,7 +232,7 @@
 
   <h2>7. Social Media Logins</h2>
   <p>The Services allow you to connect your Google, Instagram, Facebook, or TikTok account so Brand Gita can publish on your behalf. When you do, I receive limited profile information from that platform — typically your name and profile picture (and, for some platforms, your email address) — along with an OAuth access token. A TikTok connection is used only to publish; it is not used to create or log in to a Brand Gita account.</p>
-  <p><strong>OAuth tokens are stored only on your local device</strong> in your operating system's secure credential store. I do not upload, cache, or retain your tokens or credentials on any Brand Gita server.</p>
+  <p><strong>OAuth tokens are stored encrypted on Brand Gita's servers</strong> (Cloudflare), not on your device, and are used only to publish what you ask Brand Gita to post. I never store your account passwords. Disconnecting an account deletes its token.</p>
   <p>I use information received from social platforms only for the purposes described in this Policy. I do not control how those platforms independently collect or use your information and recommend you review their privacy policies.</p>
   <p>To disconnect a social account:</p>
   <ol>
@@ -290,7 +290,7 @@
   <p>I implement appropriate technical and organisational measures to protect your personal information, including:</p>
   <ul>
     <li>Encryption of data in transit using TLS</li>
-    <li>OAuth tokens stored in your device's secure credential store — never on Brand Gita servers</li>
+    <li>OAuth tokens encrypted at rest (AES-256-GCM) on Brand Gita's servers, and never kept on your device as long-lived credentials</li>
     <li>Access controls limiting who can access personal information</li>
     <li>Regular review of security practices</li>
   </ul>
