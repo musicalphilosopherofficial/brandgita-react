@@ -276,6 +276,12 @@ async function postCarousel(post, assetKeys, accessToken, deps) {
 export const instagram = Object.freeze({
   id: 'ig',
 
+  // The scheduled_posts column that holds this platform's published-post id, written the moment the
+  // platform confirms the publish and BEFORE the permalink lookup. The stale-claim reaper in poster.js
+  // reads it to decide "already live — do not publish again". EVERY adapter must declare one (a test
+  // enforces it): a platform with no such id cannot be safely retried after a worker dies mid-attempt.
+  publishedIdColumn: 'ig_media_id',
+
   // {ok:true, creds:{accessToken}} | {ok:false, permanent, error}.
   async loadCredentials(env, post) {
     const tokenRow = await env.DB.prepare(

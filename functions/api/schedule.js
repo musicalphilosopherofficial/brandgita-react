@@ -137,7 +137,7 @@ export async function onRequest(context) {
     let rows;
     try {
       const result = await env.DB.prepare(
-        `SELECT id, platform, type, post_at, status, permalink, error, caption
+        `SELECT id, platform, type, post_at, status, permalink, error, retry_count, caption
          FROM scheduled_posts
          WHERE ig_user_id = ?
          ORDER BY post_at ASC`

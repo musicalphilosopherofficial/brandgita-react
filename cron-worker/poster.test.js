@@ -90,6 +90,15 @@ function makeEnv({ posts = {}, tokens = {}, breakWriteWhen = null, breakDueQuery
   }
 
   function execAll(sql) {
+    // AUDIT NOTE (2026-10-09, stale-claim reaper): runDue now also issues two observation queries —
+    // the stale-claim reaper (`status = 'posting' AND ... posting_since`) and the late-row log
+    // (`status IN ('scheduled', 'posting')` with the 15-minute lateness test). This fake models neither stale claims nor
+    // timestamps, so they correctly find nothing here; the real predicates are exercised against a
+    // real SQLite engine in cron-worker/stale-claim.test.js. Without this the late-row query fell
+    // through to the due-query branch below and returned every row.
+    if (sql.includes('posting_since') || sql.includes(`status IN ('scheduled', 'posting')`)) {
+      return { results: [] };
+    }
     if (sql.includes('SELECT * FROM scheduled_posts')) {
       if (breakDueQuery) throw new Error('D1 down (simulated due-query failure)');
       // Mirror the real predicates so tests can prove the SQL actually asks

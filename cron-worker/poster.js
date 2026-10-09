@@ -87,7 +87,7 @@ const ENTITLED_SQL = `
 // cancelled seconds ago.
 async function claimPost(env, id) {
   const res = await env.DB.prepare(
-    `UPDATE scheduled_posts SET status = 'posting'
+    `UPDATE scheduled_posts SET status = 'posting', posting_since = datetime('now')
       WHERE id = ? AND status = 'scheduled' AND ${ENTITLED_SQL}`
   ).bind(id).run();
   return res?.meta?.changes === 1;
@@ -146,6 +146,124 @@ async function handleRetryableFailure(env, post, errorText) {
     ).bind(next, errorText, post.id).run();
     console.error(`Post ${post.id} failed (attempt ${next}), will retry: ${errorText}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Stale-claim reaper + late-row audit — platform-agnostic, so every adapter gets both for free.
+//
+// Observed 2026-10-09: a reel due 12:00 sat in 'posting' for 4.5+ hours, no error, no media id.
+// claimPost flips scheduled -> posting and runDue only selects 'scheduled', so a worker that died
+// mid-attempt (timeout, deploy, isolate eviction) left the row there forever: the code that would
+// have retried it (handleRetryableFailure) was the code that died.
+//
+// SELF-HEALING, NOT ALERTING (founder, 2026-10-09). The worker deals with the post itself: the reaper
+// requeues it and the existing retry cap handles the rest, so a late post with retries left publishes
+// on the next cron run however late. Nothing here notifies anyone and lateness never raises a ticket;
+// raisePostFailure stays reserved for the existing permanent failure after the 5th attempt. The record
+// is a structured console.error line, written EVERY time (no de-duplication) — Cloudflare logs are the
+// audit trail.
+// ---------------------------------------------------------------------------
+
+// A claim older than this belongs to a worker that is gone. Comfortably above a slow reel (the
+// container poll alone allows 5 minutes) so a live attempt is never double-claimed.
+const STALE_CLAIM_MINUTES = 10;
+// A still-live row (scheduled/posting) this far past its post_at is logged as late.
+const LATE_ROW_MINUTES = 15;
+// Bounds the late-row log so a failed row from months ago is not logged on every tick forever.
+const LATE_LOOKBACK_DAYS = 7;
+
+const STALE_CLAIM_SQL = `status = 'posting'
+  AND (posting_since IS NULL OR datetime(posting_since) < datetime('now', '-${STALE_CLAIM_MINUTES} minutes'))`;
+
+function minutesLate(post) {
+  return Math.round((Date.now() - Date.parse(post.post_at)) / 60_000);
+}
+
+// One structured line, always JSON on a single line so a log search can filter on `event`.
+function auditLog(event, post, statusBefore, retryCount, action) {
+  console.error(JSON.stringify({
+    event,
+    post_id: post.id,
+    platform: post.platform || DEFAULT_PLATFORM,
+    status_before: statusBefore,
+    minutes_late: minutesLate(post),
+    retry_count: retryCount,
+    action,
+  }));
+}
+
+// Hand every abandoned claim back to the queue. Never throws: it runs at the top of runDue and a
+// failure here must not stop publishing.
+async function reapStaleClaims(env) {
+  let rows = [];
+  try {
+    const r = await env.DB.prepare(`SELECT * FROM scheduled_posts WHERE ${STALE_CLAIM_SQL} LIMIT 50`).all();
+    rows = (r.results || []).filter((p) => p.status === 'posting');
+  } catch (err) {
+    console.error('Poster: stale-claim query failed:', { message: err?.message });
+    return 0;
+  }
+
+  let reaped = 0;
+  for (const post of rows) {
+    try {
+      // Take ownership by refreshing the claim. If another run reaped it first (or the worker finished
+      // after all), the row no longer matches and we leave it alone.
+      const own = await env.DB.prepare(
+        `UPDATE scheduled_posts SET posting_since = datetime('now') WHERE id = ? AND ${STALE_CLAIM_SQL}`
+      ).bind(post.id).run();
+      if (own?.meta?.changes !== 1) continue;
+
+      const adapter = ADAPTERS[post.platform || DEFAULT_PLATFORM];
+      const publishedId = adapter?.publishedIdColumn ? post[adapter.publishedIdColumn] : null;
+      const current = post.retry_count ?? 0;
+      const lastAttempt = current >= MAX_RETRY_BEFORE_PERMANENT_FAIL;
+
+      if (publishedId) {
+        // Already live on the platform. Requeue WITHOUT counting an attempt: the retry will only fetch
+        // the link, and counting it here could eventually fail a post that is already published.
+        await env.DB.prepare(
+          `UPDATE scheduled_posts SET status = 'scheduled', posting_since = NULL, error = ?
+            WHERE id = ? AND status = 'posting'`
+        ).bind(`abandoned after publish (worker died); fetching link, retry ${current}`, post.id).run();
+        auditLog('poster.stale_claim_reaped', post, 'posting', current, 'permalink-only retry');
+      } else {
+        await handleRetryableFailure(env, post, `attempt abandoned (worker died), retry ${current + 1} of ${MAX_RETRY_BEFORE_PERMANENT_FAIL + 1}`);
+        auditLog('poster.stale_claim_reaped', post, 'posting', current + 1, lastAttempt ? 'failed permanently' : 'requeued');
+      }
+      reaped++;
+    } catch (err) {
+      console.error(`Poster: could not reap post ${post.id}:`, { message: err?.message });
+    }
+  }
+  return reaped;
+}
+
+// The audit half: every still-live row (scheduled or posting) more than 15 minutes past its time
+// gets a log line on every run. Failed rows are deliberately NOT here: a post that failed after its
+// 5th attempt is already logged once by the reaper (or ticketed by raisePostFailure), and repeating it
+// every minute for the whole lookback would bury the lines that matter. Observation only — it changes nothing. Runs AFTER the due loop so a
+// post that was merely late and published in this very run is not reported as still late.
+async function logLateRows(env) {
+  let rows = [];
+  try {
+    const r = await env.DB.prepare(
+      `SELECT * FROM scheduled_posts
+        WHERE status IN ('scheduled', 'posting')
+          AND datetime(post_at) < datetime('now', '-${LATE_ROW_MINUTES} minutes')
+          AND datetime(post_at) > datetime('now', '-${LATE_LOOKBACK_DAYS} days')
+        LIMIT 50`
+    ).all();
+    rows = (r.results || []).filter((p) => p.status === 'scheduled' || p.status === 'posting');
+  } catch (err) {
+    console.error('Poster: late-row query failed:', { message: err?.message });
+    return 0;
+  }
+  for (const post of rows) {
+    const action = post.status === 'scheduled' ? 'queued' : 'in progress';
+    auditLog('poster.late_row', post, post.status, post.retry_count ?? 0, action);
+  }
+  return rows.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +393,9 @@ async function runDue(env, deps = {}) {
     pollMaxMs = POLL_MAX_MS,
   } = deps;
 
+  // First hand back any claim whose worker died, so it is eligible for the due-query below.
+  await reapStaleClaims(env);
+
   // Find up to 10 due, still-scheduled posts under the retry cap.
   let duePosts = [];
   try {
@@ -332,6 +453,9 @@ async function runDue(env, deps = {}) {
       }
     }
   }
+
+  // Last: log anything still unpublished 15+ minutes past its time (observation only).
+  await logLateRows(env);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +467,7 @@ async function runDue(env, deps = {}) {
 // nothing but `default.scheduled` — Wrangler doesn't even look at named exports
 // on a scheduled handler — so these are inert in production. (refreshExpiringTokens
 // is exported separately above, as a pass-through to the Instagram adapter.)
-export { processPost, handleRetryableFailure, claimPost, runDue };
+export { processPost, handleRetryableFailure, claimPost, runDue, reapStaleClaims, logLateRows };
 
 export default {
   async scheduled(event, env, ctx) {
