@@ -1,5 +1,5 @@
 import { requireUserAuth } from '../_auth.js';
-import { contractFor } from '../../../shared/platform-contracts.js';
+import { contractFor, resolveTrialStrategy } from '../../../shared/platform-contracts.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -129,7 +129,7 @@ export async function onRequest(context) {
 // caller's account prefix, the platform contract, and the object already in R2. The replaced objects are deleted from R2 only
 // AFTER the row update succeeds, so a failed update never strands a post without its media. id, type, platform and the owner
 // stay fixed. See PATCH_SCHEDULE_SPEC.md.
-const PATCHABLE = new Set(['post_at', 'caption', 'cover_key', 'asset_keys']);
+const PATCHABLE = new Set(['post_at', 'caption', 'cover_key', 'asset_keys', 'trial_strategy']);
 
 async function handlePatch(context) {
   const { request, env, params } = context;
@@ -162,7 +162,7 @@ async function handlePatch(context) {
     return json({ ok: false, error: `nothing to update (patchable: ${[...PATCHABLE].join(', ')})` }, 400);
   }
 
-  const { post_at, caption, cover_key, asset_keys } = body;
+  const { post_at, caption, cover_key, asset_keys, trial_strategy } = body;
 
   if (post_at !== undefined) {
     const postAtMs = Date.parse(post_at);
@@ -187,10 +187,15 @@ async function handlePatch(context) {
     return json({ ok: false, error: 'asset_keys must be a non-empty array' }, 400);
   }
 
+  // null is refused rather than read as "clear it": there is no opt-out value, and a silent clear would be a surprise.
+  if (trial_strategy !== undefined && (trial_strategy === null || typeof trial_strategy !== 'string')) {
+    return json({ ok: false, error: 'trial_strategy must be a string' }, 400);
+  }
+
   let post;
   try {
     post = await env.DB.prepare(
-      `SELECT id, ig_user_id, status, caption, post_at, platform, type, asset_keys, cover_key FROM scheduled_posts WHERE id = ?`
+      `SELECT id, ig_user_id, status, caption, post_at, platform, type, asset_keys, cover_key, trial_strategy FROM scheduled_posts WHERE id = ?`
     )
       .bind(id)
       .first();
@@ -236,6 +241,13 @@ async function handlePatch(context) {
     }
   }
 
+  if (trial_strategy !== undefined) {
+    const trial = resolveTrialStrategy(contract, { type: post.type, requested: trial_strategy });
+    if (trial.problems.length) {
+      return json({ ok: false, error: trial.problems.join('; ') }, 400);
+    }
+  }
+
   // New keys: the caller's account only (the cron serves them as public URLs), and already uploaded.
   const newKeys = [...(asset_keys || []), ...(cover_key !== undefined ? [cover_key] : [])];
   const prefix = `${ig_user_id}/`;
@@ -263,6 +275,7 @@ async function handlePatch(context) {
   if (caption !== undefined) { sets.push('caption = ?'); binds.push(caption); }
   if (cover_key !== undefined) { sets.push('cover_key = ?'); binds.push(cover_key); }
   if (asset_keys !== undefined) { sets.push('asset_keys = ?'); binds.push(JSON.stringify(asset_keys)); }
+  if (trial_strategy !== undefined) { sets.push('trial_strategy = ?'); binds.push(trial_strategy); }
 
   try {
     await env.DB.prepare(`UPDATE scheduled_posts SET ${sets.join(', ')} WHERE id = ?`)
@@ -296,6 +309,7 @@ async function handlePatch(context) {
     caption: effective.caption,
     cover_key: cover_key !== undefined ? cover_key : post.cover_key,
     asset_keys: effective.asset_keys,
+    trial_strategy: trial_strategy !== undefined ? trial_strategy : post.trial_strategy ?? null,
   };
   if (deleteErrors.length) out.warning = `Updated, but some replaced media could not be removed from storage: ${deleteErrors.join(', ')}`;
   return json(out);

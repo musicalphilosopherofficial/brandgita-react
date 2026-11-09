@@ -65,3 +65,57 @@ test('contracts are frozen — a caller cannot mutate the shared vocabulary', ()
   // subsequent one on the same isolate.
   assert.throws(() => { CONTRACTS.ig.captionMax = 99; }, TypeError);
 });
+
+// ── Trial capability (Instagram trial reels) ──────────────────────────────────
+import { resolveTrialStrategy } from './platform-contracts.js';
+
+test('every registered platform declares a `trial` key (null when unsupported)', () => {
+  for (const [id, c] of Object.entries(CONTRACTS)) {
+    assert.ok('trial' in c, `${id} must declare trial (an object, or null)`);
+  }
+});
+
+test('Instagram declares reel-only trials with SS_PERFORMANCE as the default', () => {
+  assert.deepEqual(
+    { kinds: [...ig().trial.kinds], strategies: [...ig().trial.strategies], default: ig().trial.default },
+    { kinds: ['reel'], strategies: ['MANUAL', 'SS_PERFORMANCE'], default: 'SS_PERFORMANCE' },
+  );
+});
+
+test('resolve: an eligible reel with no value gets the platform default', () => {
+  assert.deepEqual(resolveTrialStrategy(ig(), { type: 'reel' }), { strategy: 'SS_PERFORMANCE', problems: [] });
+  assert.deepEqual(resolveTrialStrategy(ig(), { type: 'reel', requested: null }), { strategy: 'SS_PERFORMANCE', problems: [] });
+});
+
+test('resolve: an explicit MANUAL on a reel is kept', () => {
+  assert.deepEqual(resolveTrialStrategy(ig(), { type: 'reel', requested: 'MANUAL' }), { strategy: 'MANUAL', problems: [] });
+});
+
+test('resolve: a carousel with no value is simply not a trial', () => {
+  assert.deepEqual(resolveTrialStrategy(ig(), { type: 'carousel' }), { strategy: null, problems: [] });
+});
+
+test('resolve: a trial requested on a carousel is rejected, naming the eligible kinds', () => {
+  const r = resolveTrialStrategy(ig(), { type: 'carousel', requested: 'MANUAL' });
+  assert.equal(r.strategy, null);
+  assert.match(r.problems[0], /trial.*reel/i);
+});
+
+test('resolve: an unknown strategy is rejected, naming what is allowed', () => {
+  const r = resolveTrialStrategy(ig(), { type: 'reel', requested: 'AUTO' });
+  assert.match(r.problems[0], /MANUAL/);
+  assert.match(r.problems[0], /SS_PERFORMANCE/);
+  assert.match(r.problems[0], /AUTO/);
+});
+
+test('resolve: a non-string strategy is rejected, not coerced', () => {
+  assert.equal(resolveTrialStrategy(ig(), { type: 'reel', requested: 5 }).problems.length, 1);
+  assert.equal(resolveTrialStrategy(ig(), { type: 'reel', requested: {} }).problems.length, 1);
+});
+
+test('resolve: a platform with trial:null rejects a requested trial and defaults to none', () => {
+  const noTrial = { id: 'zz', label: 'Zed', trial: null };
+  assert.deepEqual(resolveTrialStrategy(noTrial, { type: 'reel' }), { strategy: null, problems: [] });
+  const r = resolveTrialStrategy(noTrial, { type: 'reel', requested: 'MANUAL' });
+  assert.match(r.problems[0], /Zed.*trial/i);
+});

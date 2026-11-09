@@ -1,5 +1,5 @@
 import { requireUserAuth } from './_auth.js';
-import { DEFAULT_PLATFORM, contractFor } from '../../shared/platform-contracts.js';
+import { DEFAULT_PLATFORM, contractFor, resolveTrialStrategy } from '../../shared/platform-contracts.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -67,6 +67,10 @@ export async function onRequest(context) {
     // (2200 chars is Meta's limit; YouTube's is 5000). Keeping them in this generic
     // handler is what would make it silently wrong for platform two.
     const problems = contract.validateCreate({ type, asset_keys, caption });
+    // Trial strategy: resolved HERE, when the row is created, so the cron worker never has to
+    // guess a default. No client value on an eligible reel stores the platform default.
+    const trial = resolveTrialStrategy(contract, { type, requested: body.trial_strategy });
+    problems.push(...trial.problems);
     if (problems.length) {
       // Every problem at once — a creator fixing one field per request is a worse
       // experience than being told all of it up front.
@@ -103,8 +107,8 @@ export async function onRequest(context) {
     try {
       await env.DB.prepare(
         `INSERT INTO scheduled_posts
-           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?)`
+           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at, trial_strategy)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?, ?)`
       )
         .bind(
           id,
@@ -115,7 +119,8 @@ export async function onRequest(context) {
           cover_key ?? null,
           caption,
           post_at,
-          now
+          now,
+          trial.strategy
         )
         .run();
     } catch (err) {
@@ -137,7 +142,7 @@ export async function onRequest(context) {
     let rows;
     try {
       const result = await env.DB.prepare(
-        `SELECT id, platform, type, post_at, status, permalink, error, retry_count, caption
+        `SELECT id, platform, type, post_at, status, permalink, error, retry_count, caption, trial_strategy
          FROM scheduled_posts
          WHERE ig_user_id = ?
          ORDER BY post_at ASC`

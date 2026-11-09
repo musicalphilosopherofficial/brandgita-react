@@ -36,6 +36,18 @@ export const CONTRACTS = Object.freeze({
     // this refactor exists to prevent.
     captionMax: 2200,
 
+    // Trial reels (Meta Content Publishing API, `trial_params` on the reel container; changelog
+    // 2025-12-03). A trial shows the reel to non-followers first; graduating it to followers is
+    // done in the Instagram app, never through the API. MANUAL = the creator graduates it by hand;
+    // SS_PERFORMANCE = Instagram graduates it automatically if it performs. Reels only. Other
+    // platforms declare `trial: null` — the key is mandatory (a contract test enforces it) so
+    // "this platform has no trials" is a stated fact, not an omission.
+    trial: Object.freeze({
+      kinds: Object.freeze(['reel']),
+      strategies: Object.freeze(['MANUAL', 'SS_PERFORMANCE']),
+      default: 'SS_PERFORMANCE',
+    }),
+
     /**
      * Problems with a create request, as human-readable strings. Empty array means valid.
      *
@@ -83,4 +95,43 @@ export function contractFor(platform) {
 /** Every registered platform id. Sorted, so output and error messages are stable. */
 export function supportedPlatforms() {
   return Object.keys(CONTRACTS).sort();
+}
+
+/**
+ * Resolve the trial strategy for a post, for create and patch alike (one rule, two callers).
+ *
+ *   requested undefined/null -> the platform default when the kind is trial-eligible, else none.
+ *   requested a value        -> must be a string the platform declares, on an eligible kind.
+ *
+ * Returns { strategy: string|null, problems: string[] }. Problems name what IS allowed, so a
+ * caller can fix the request in one round trip.
+ */
+export function resolveTrialStrategy(contract, { type, requested } = {}) {
+  const trial = contract.trial;
+  const noValue = requested === undefined || requested === null;
+  const label = contract.label || contract.id;
+
+  if (!trial) {
+    if (noValue) return { strategy: null, problems: [] };
+    return { strategy: null, problems: [`${label} does not support trial posts`] };
+  }
+
+  const eligible = trial.kinds.includes(type);
+  if (noValue) return { strategy: eligible ? trial.default : null, problems: [] };
+
+  if (!eligible) {
+    return {
+      strategy: null,
+      problems: [`a trial is only available for: ${trial.kinds.join(', ')} (this post is a ${type})`],
+    };
+  }
+  if (typeof requested !== 'string' || !trial.strategies.includes(requested)) {
+    return {
+      strategy: null,
+      problems: [
+        `trial_strategy must be one of: ${trial.strategies.join(', ')} (got ${JSON.stringify(requested)})`,
+      ],
+    };
+  }
+  return { strategy: requested, problems: [] };
 }

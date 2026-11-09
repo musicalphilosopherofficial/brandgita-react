@@ -186,6 +186,11 @@ async function postReel(post, assetKeys, accessToken, deps) {
   if (post.cover_key) {
     params.cover_url = mediaUrl(post.cover_key, deps.mediaBase);
   }
+  // Trial reel: only when the row carries a strategy (NULL = a normal reel). Meta takes the object
+  // as a JSON string in the form body; igPost would otherwise stringify it as "[object Object]".
+  if (post.trial_strategy) {
+    params.trial_params = JSON.stringify({ graduation_strategy: post.trial_strategy });
+  }
 
   const createRes = await igPost(`${igUserId}/media`, params, accessToken);
   const creationId = createRes.id;
