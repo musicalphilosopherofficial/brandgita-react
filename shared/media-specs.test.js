@@ -16,14 +16,21 @@ const T = (platform, kind) => ({ platform, kind });
 const stored = (plan) => plan.stored.map((f) => f.id);
 const usedBy = (plan, id) => plan.stored.find((f) => f.id === id).targets.map((t) => `${t.platform}:${t.kind}`).sort();
 
-test('every spec declares a native aspect that sits inside one of its own accepted bands', () => {
+test('every platform lists the aspect ratios it accepts, as plain "w:h" options', () => {
   for (const [p, kinds] of Object.entries(MEDIA_SPECS)) {
-    for (const [k, s] of Object.entries(kinds)) {
-      assert.ok(s.nativeAspect > 0, `${p}.${k} nativeAspect`);
-      assert.ok(Array.isArray(s.aspectBands) && s.aspectBands.length > 0, `${p}.${k} aspectBands`);
-      assert.ok(s.aspectBands.some((b) => b.min <= s.nativeAspect && s.nativeAspect <= b.max), `${p}.${k} native aspect must be accepted`);
+    for (const [k, spec] of Object.entries(kinds)) {
+      assert.ok(Array.isArray(spec.aspects) && spec.aspects.length > 0, `${p}.${k} aspects`);
+      for (const a of spec.aspects) assert.match(a, /^\d+:\d+$/, `${p}.${k}: ${a}`);
     }
   }
+});
+
+test('the lists are exactly the founder\'s rules', () => {
+  assert.deepEqual(MEDIA_SPECS.ig.reel.aspects, ['9:16', '16:9']);
+  assert.deepEqual(MEDIA_SPECS.ig.carousel.aspects, ['1:1', '4:5']);
+  assert.deepEqual(MEDIA_SPECS.tt.video.aspects, ['9:16']);
+  assert.deepEqual(MEDIA_SPECS.yt.short.aspects, ['9:16']);
+  assert.deepEqual(MEDIA_SPECS.yt.video.aspects, ['16:9']);
 });
 
 test('a SQUARE (1:1) file is not accepted for an IG reel or a YouTube Short', () => {
@@ -85,7 +92,7 @@ test('a target no supplied file fits is a problem naming the platform, what it n
   const plan = assignFiles({ files: [landscape], targets: [T('yt', 'short')] });
   assert.equal(plan.problems.length, 1);
   assert.match(plan.problems[0], /YouTube short/);
-  assert.match(plan.problems[0], /0\.55.*0\.57/s, 'names the accepted width÷height range');
+  assert.match(plan.problems[0], /9:16/, 'names the accepted aspect ratio');
   assert.match(plan.problems[0], /l\b/, 'names the file that was tried');
   assert.deepEqual(plan.stored, []);
 });

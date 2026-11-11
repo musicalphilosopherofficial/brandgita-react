@@ -16,15 +16,12 @@
  * scheduled by the cron, so its registry is independent.
  *
  * SPEC FIELDS
- *   nativeAspect  width/height the platform is built around (9/16 = vertical). Used only as the
- *                 tie-break when two files both fit: the one nearest native wins.
- *   aspectBands   the width/height ranges a file may have and be posted AS-IS (a LIST: a Reel takes
- *                 vertical and 16:9 but not the square between them).
- *     Founder-stated (2026-11-12, corrected three times): IG Reel = vertical or 16:9; IG carousel
- *     = 1:1 or 4:5 (for now); TikTok and YouTube Short = vertical only; YouTube video = 16:9. These
- *     bands are the founder's rule and were NOT derived from API docs — Meta's Reels page gave no
- *     aspect numbers and TikTok's docs state none; widening a band from "the docs don't forbid it"
- *     was the mistake that was corrected.
+ *   aspects       the aspect ratios the platform accepts, as a plain list of "w:h" options, in order of
+ *                 preference (first wins a tie). Founder-stated (2026-11-12, corrected repeatedly):
+ *                 IG Reel 9:16 or 16:9; IG carousel 1:1 or 4:5; TikTok 9:16; YouTube Short 9:16;
+ *                 YouTube video 16:9. NOT derived from API docs — Meta's Reels page gave no aspect
+ *                 numbers and TikTok's docs state none, and widening from "the docs don't forbid
+ *                 it" was the mistake that was corrected. A file matches an option within 2%.
  *   maxDurationSec, maxBytes, minPx, maxPx   HARD limits, present only where the platform's own docs
  *     state them (checked 2026-11-12). Absent = not enforced here, NOT "no limit".
  *       TikTok  developers.tiktok.com/doc/content-posting-api-media-transfer-guide
@@ -35,32 +32,30 @@
  * every layer; 'tt' is TikTok's.
  */
 
-const band = (min, max) => Object.freeze({ min, max });
-const VERTICAL = band(0.551, 0.574);   // 9:16 (0.5625) ±2%, for encoder rounding only
-const LANDSCAPE = band(1.7, 1.85);     // 16:9 (1.778)
-const SQUARE = band(0.95, 1.05);       // 1:1
-const FOUR_FIVE = band(0.78, 0.82);    // 4:5 (0.8)
-
 export const MEDIA_SPECS = Object.freeze({
   ig: Object.freeze({
-    // A Reel takes vertical or 16:9 — NOT square or 4:5 (founder, 2026-11-12).
-    reel: Object.freeze({ nativeAspect: 9 / 16, aspectBands: Object.freeze([VERTICAL, LANDSCAPE]) }),
-    // Carousels take 1:1 and 4:5 for now (founder, 2026-11-12). Note: this entry judges ONE file; a
-    // carousel is 2–10 slides and each slide is checked separately by the caller.
-    carousel: Object.freeze({ nativeAspect: 1, aspectBands: Object.freeze([SQUARE, FOUR_FIVE]) }),
+    // The founder's lists (2026-11-12). Order = preference when two supplied files both fit.
+    reel: Object.freeze({ aspects: Object.freeze(['9:16', '16:9']) }),
+    // Carousels take 1:1 and 4:5 for now. This entry judges ONE file; a carousel is 2–10 slides and
+    // the caller checks each slide.
+    carousel: Object.freeze({ aspects: Object.freeze(['1:1', '4:5']) }),
   }),
   tt: Object.freeze({
     video: Object.freeze({
-      nativeAspect: 9 / 16, aspectBands: Object.freeze([VERTICAL]),
+      aspects: Object.freeze(['9:16']),
       maxDurationSec: 600, maxBytes: 4 * 1024 ** 3, minPx: 360, maxPx: 4096,
     }),
   }),
   yt: Object.freeze({
-    // A Short is vertical and at most 3 minutes (square is NOT accepted — founder, 2026-11-12).
-    short: Object.freeze({ nativeAspect: 9 / 16, aspectBands: Object.freeze([VERTICAL]), maxDurationSec: 180 }),
-    video: Object.freeze({ nativeAspect: 16 / 9, aspectBands: Object.freeze([LANDSCAPE]) }),
+    short: Object.freeze({ aspects: Object.freeze(['9:16']), maxDurationSec: 180 }),
+    video: Object.freeze({ aspects: Object.freeze(['16:9']) }),
   }),
 });
+
+// A file "is" 9:16 if its width÷height is within 2% of 9÷16 — encoder rounding (1080x1918), nothing more.
+const ASPECT_TOLERANCE = 0.02;
+const ratioOf = (label) => { const [w, h] = label.split(':').map(Number); return w / h; };
+const matchesAspect = (file, label) => Math.abs(file.width / file.height / ratioOf(label) - 1) <= ASPECT_TOLERANCE;
 
 /** Names for messages, so a platform id is never shown to a creator raw. */
 export const PLATFORM_LABELS = Object.freeze({ ig: 'Instagram', tt: 'TikTok', yt: 'YouTube' });
@@ -75,10 +70,8 @@ function supportedList() {
 
 /** Why `file` cannot serve a platform with `spec`, or null when it can. */
 function whyNot(file, spec) {
-  const aspect = file.width / file.height;
-  if (!spec.aspectBands.some((b) => aspect >= b.min && aspect <= b.max)) {
-    const wants = spec.aspectBands.map((b) => `${round2(b.min)}–${round2(b.max)}`).join(' or ');
-    return `${file.id} is ${file.width}x${file.height} (width÷height ${round2(aspect)}), which is outside ${wants}`;
+  if (!spec.aspects.some((a) => matchesAspect(file, a))) {
+    return `${file.id} is ${file.width}x${file.height} (${round2(file.width / file.height)}:1) but ${spec.aspects.join(' or ')} is needed`;
   }
   if (spec.maxDurationSec && finitePositive(file.durationSec) && file.durationSec > spec.maxDurationSec) {
     return `${file.id} is ${Math.round(file.durationSec)}s but the limit is ${spec.maxDurationSec}s`;
@@ -163,7 +156,7 @@ export function assignFiles({ files, targets } = {}) {
   if (problems.length) return { stored: [], assignments: {}, unused: list.map((f) => f.id), problems };
 
   // ── fewest stored files: greedy set cover. Pick the file serving the most unserved targets; ties go
-  //    to the file nearest those targets' native aspect, then to the caller's order (deterministic). ──
+  //    to the file sitting nearest each target's first-choice aspect, then to the caller's order. ──
   const unserved = new Set(wanted.map(({ target }) => keyOf(target)));
   const byKey = new Map(wanted.map((w) => [keyOf(w.target), w]));
   const chosen = []; // {file, targets:[]}
@@ -173,7 +166,8 @@ export function assignFiles({ files, targets } = {}) {
     list.forEach((f, order) => {
       const serves = [...unserved].filter((k) => eligible.get(k).includes(f));
       if (!serves.length) return;
-      const drift = serves.reduce((sum, k) => sum + Math.abs(Math.log((f.width / f.height) / byKey.get(k).spec.nativeAspect)), 0);
+      // Tie-break: how far down each target's preference list the file sits (0 = the platform's first choice).
+      const drift = serves.reduce((sum, k) => sum + byKey.get(k).spec.aspects.findIndex((a) => matchesAspect(f, a)), 0);
       const score = { f, serves, order, drift };
       if (!best
         || serves.length > best.serves.length
