@@ -82,10 +82,10 @@ test('upload-url: without clip/targets the response is unchanged (no plan)', asy
 
 test('upload-url: with clip + targets it returns the rendition plan', async () => {
   const { env } = makeEnv({ post: null });
-  const res = await uploadUrl({ request: req('POST', { keys: [KEY], clip: landscape, targets: [{ platform: 'ig', kind: 'reel' }, { platform: 'yt', kind: 'video' }] }), env });
+  const res = await uploadUrl({ request: req('POST', { keys: [KEY], clip: landscape, targets: [{ platform: 'ig', kind: 'reel' }, { platform: 'yt', kind: 'short' }] }), env });
   const data = await res.json();
   assert.equal(res.status, 200);
-  assert.equal(data.plan.renditions.length, 2);
+  assert.equal(data.plan.renditions.length, 2, 'a landscape clip: IG keeps the source, the Short needs a vertical file');
   assert.equal(data.uploads.length, 1, 'uploads still mirror the keys the caller asked for');
 });
 

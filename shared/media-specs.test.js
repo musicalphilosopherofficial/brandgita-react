@@ -31,38 +31,46 @@ test('a vertical clip going to IG reel + TikTok + YouTube Short is stored ONCE',
   assert.deepEqual(labels(plan.renditions[0]), ['ig:reel', 'tt:video', 'yt:short']);
 });
 
-test('a landscape clip: YouTube video keeps the source; IG reel + TikTok SHARE one vertical rendition', () => {
+test('a landscape clip goes to IG reel + TikTok + YouTube video as ONE file (Reels and TikTok accept 16:9)', () => {
   const plan = planRenditions({ clip: landscape, targets: [T('ig', 'reel'), T('tt', 'video'), T('yt', 'video')] });
   assert.deepEqual(plan.problems, []);
-  assert.equal(plan.renditions.length, 2, 'not 3: IG and TikTok need the same 9:16 file');
-  const source = plan.renditions.find((r) => !r.derived);
-  const derived = plan.renditions.find((r) => r.derived);
-  assert.deepEqual(labels(source), ['yt:video']);
-  assert.deepEqual(labels(derived), ['ig:reel', 'tt:video']);
-  assert.ok(Math.abs(derived.aspect - 9 / 16) < 1e-9);
+  assert.deepEqual(ids(plan), ['source']);
+  assert.deepEqual(labels(plan.renditions[0]), ['ig:reel', 'tt:video', 'yt:video']);
 });
 
-test('a landscape clip going only to YouTube needs just the source', () => {
-  const plan = planRenditions({ clip: landscape, targets: [T('yt', 'video')] });
+test('a landscape clip going only to IG reel is stored as-is — no derived copy', () => {
+  const plan = planRenditions({ clip: landscape, targets: [T('ig', 'reel')] });
   assert.deepEqual(ids(plan), ['source']);
 });
 
-test('a landscape clip going only to IG reel stores ONLY the derived vertical file (no unused source)', () => {
-  const plan = planRenditions({ clip: landscape, targets: [T('ig', 'reel')] });
-  assert.equal(plan.renditions.length, 1);
-  assert.equal(plan.renditions[0].derived, true);
+test('a landscape clip: a YouTube Short (vertical/square only) is the one that needs a derived vertical file', () => {
+  const plan = planRenditions({ clip: landscape, targets: [T('ig', 'reel'), T('yt', 'short')] });
+  assert.deepEqual(plan.problems, []);
+  assert.equal(plan.renditions.length, 2);
+  assert.deepEqual(labels(plan.renditions.find((r) => !r.derived)), ['ig:reel']);
+  const derived = plan.renditions.find((r) => r.derived);
+  assert.deepEqual(labels(derived), ['yt:short']);
+  assert.ok(Math.abs(derived.aspect - 9 / 16) < 1e-9);
 });
 
-test('a square clip: YouTube Short accepts it as-is, IG reel needs a vertical derivative', () => {
+test('an ultra-wide clip (21:9) is outside what Reels accept: IG reel + TikTok share ONE derived file', () => {
+  const ultra = { width: 2520, height: 1080, durationSec: 60, bytes: 20e6 };
+  const plan = planRenditions({ clip: ultra, targets: [T('ig', 'reel'), T('tt', 'video'), T('yt', 'video')] });
+  assert.equal(plan.problems.length, 0);
+  assert.equal(plan.renditions.length, 2, 'YouTube video keeps the source; IG + TikTok share one derived file');
+  assert.deepEqual(labels(plan.renditions.find((r) => r.derived)), ['ig:reel', 'tt:video']);
+});
+
+test('a square clip is accepted by IG reel and YouTube Short as-is', () => {
   const plan = planRenditions({ clip: square, targets: [T('ig', 'reel'), T('yt', 'short')] });
-  assert.deepEqual(labels(plan.renditions.find((r) => !r.derived)), ['yt:short']);
-  assert.deepEqual(labels(plan.renditions.find((r) => r.derived)), ['ig:reel']);
+  assert.deepEqual(ids(plan), ['source']);
 });
 
 test('assignments map every target to the rendition that serves it', () => {
-  const plan = planRenditions({ clip: landscape, targets: [T('ig', 'reel'), T('yt', 'video')] });
+  const plan = planRenditions({ clip: landscape, targets: [T('ig', 'reel'), T('yt', 'short'), T('yt', 'video')] });
+  assert.equal(plan.assignments['ig:reel'], 'source');
   assert.equal(plan.assignments['yt:video'], 'source');
-  assert.match(plan.assignments['ig:reel'], /^derived-/);
+  assert.match(plan.assignments['yt:short'], /^derived-/);
 });
 
 test('duplicate targets are collapsed', () => {

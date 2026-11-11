@@ -15,8 +15,10 @@
  *   nativeAspect  width/height the platform is designed around (9/16 = vertical). A derived
  *                 rendition is made at exactly this aspect.
  *   aspectBand    the width/height range a clip may have and be posted AS-IS. Outside it, the
- *                 target needs its own rendition. These bands are PRODUCT choices (a 16:9 clip on
- *                 a Reel is technically accepted but looks wrong), not API rejections.
+ *                 target needs its own rendition. A band is where the platform ACCEPTS the clip,
+ *                 never a taste call: a narrower band than the platform's real one forces a
+ *                 duplicate file the founder's one-file rule says should not exist (corrected
+ *                 2026-11-12 — Reels accept 16:9, and TikTok's docs state no aspect limit).
  *   maxDurationSec, maxBytes, minPx, maxPx   HARD limits, present only where the platform's own
  *                 docs state them (checked 2026-11-12). Absent = not enforced here, NOT "no limit":
  *                 Meta's Reels page gave no numbers, so Instagram declares none rather than a
@@ -29,15 +31,18 @@
  * through every layer; 'tt' is TikTok's.
  */
 
-const VERTICAL_BAND = Object.freeze({ min: 0.53, max: 0.60 }); // 9:16 with a little slack for encoder rounding
+// Vertical (9:16 = 0.5625) through landscape (16:9 = 1.778). Instagram Reels accept 16:9; TikTok's
+// Content Posting docs give no aspect limit (only 360–4096 px per side). Wider than ~16:9 (e.g. 21:9)
+// is treated as outside the band so a creator is not surprised by extreme letterboxing.
+const FEED_VIDEO_BAND = Object.freeze({ min: 0.5, max: 1.8 });
 
 export const MEDIA_SPECS = Object.freeze({
   ig: Object.freeze({
-    reel: Object.freeze({ nativeAspect: 9 / 16, aspectBand: VERTICAL_BAND }),
+    reel: Object.freeze({ nativeAspect: 9 / 16, aspectBand: FEED_VIDEO_BAND }),
   }),
   tt: Object.freeze({
     video: Object.freeze({
-      nativeAspect: 9 / 16, aspectBand: VERTICAL_BAND,
+      nativeAspect: 9 / 16, aspectBand: FEED_VIDEO_BAND,
       maxDurationSec: 600, maxBytes: 4 * 1024 ** 3, minPx: 360, maxPx: 4096,
     }),
   }),
