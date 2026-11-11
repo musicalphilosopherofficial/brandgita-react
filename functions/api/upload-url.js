@@ -1,5 +1,5 @@
 import { requireUserAuth } from './_auth.js';
-import { planRenditions } from '../../shared/media-specs.js';
+import { assignFiles } from '../../shared/media-specs.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -52,14 +52,16 @@ export async function onRequest(context) {
     }
   }
 
-  // Optional: where will this clip be posted? One stored file per distinct ASPECT, not per platform
-  // (shared/media-specs.js). Omitted entirely for older clients, which get the same response as before.
+  // Optional: which of the creator's files serves which platform, and which are stored at all (one
+  // stored file per distinct aspect, not per platform — shared/media-specs.js). The creator supplies
+  // the per-aspect files; nothing re-renders. Omitted entirely for older clients, which get the same
+  // response as before.
   let plan;
-  if (body.clip !== undefined || body.targets !== undefined) {
-    if (body.clip === undefined) {
-      return json({ ok: false, error: 'targets needs a clip ({width, height, durationSec, bytes}) to plan against' }, 400);
+  if (body.files !== undefined || body.targets !== undefined) {
+    if (body.files === undefined) {
+      return json({ ok: false, error: 'targets needs files ([{id, width, height, durationSec, bytes}]) to plan against' }, 400);
     }
-    plan = planRenditions({ clip: body.clip, targets: body.targets });
+    plan = assignFiles({ files: body.files, targets: body.targets });
     if (plan.problems.length) {
       return json({ ok: false, error: plan.problems.join('; ') }, 400);
     }

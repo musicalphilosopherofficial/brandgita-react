@@ -70,9 +70,10 @@ test('PATCH asset swap: the replaced clip is deleted when nothing else uses it',
 });
 
 // ── upload-url ────────────────────────────────────────────────────────────────
-const landscape = { width: 1920, height: 1080, durationSec: 60, bytes: 20e6 };
+const vFile = { id: 'v', width: 1080, height: 1920, durationSec: 60, bytes: 20e6 };
+const lFile = { id: 'l', width: 1920, height: 1080, durationSec: 60, bytes: 20e6 };
 
-test('upload-url: without clip/targets the response is unchanged (no plan)', async () => {
+test('upload-url: without files/targets the response is unchanged (no plan)', async () => {
   const { env } = makeEnv({ post: null });
   const res = await uploadUrl({ request: req('POST', { keys: [KEY] }), env });
   const data = await res.json();
@@ -80,24 +81,27 @@ test('upload-url: without clip/targets the response is unchanged (no plan)', asy
   assert.equal('plan' in data, false);
 });
 
-test('upload-url: with clip + targets it returns the rendition plan', async () => {
+test('upload-url: with files + targets it returns which file serves which platform and what is stored', async () => {
   const { env } = makeEnv({ post: null });
-  const res = await uploadUrl({ request: req('POST', { keys: [KEY], clip: landscape, targets: [{ platform: 'ig', kind: 'reel' }, { platform: 'yt', kind: 'short' }] }), env });
+  // The landscape file serves IG reel AND YouTube video, so the vertical one is not stored at all.
+  const res = await uploadUrl({ request: req('POST', { keys: [KEY], files: [vFile, lFile], targets: [{ platform: 'ig', kind: 'reel' }, { platform: 'yt', kind: 'video' }] }), env });
   const data = await res.json();
   assert.equal(res.status, 200);
-  assert.equal(data.plan.renditions.length, 2, 'a landscape clip: IG keeps the source, the Short needs a vertical file');
+  assert.equal(data.plan.assignments['yt:video'], 'l');
+  assert.deepEqual(data.plan.stored.map((f) => f.id), ['l']);
+  assert.deepEqual(data.plan.unused, ['v']);
   assert.equal(data.uploads.length, 1, 'uploads still mirror the keys the caller asked for');
 });
 
-test('upload-url: a plan with problems is a 400 that lists them', async () => {
+test('upload-url: a target no file fits is a 400 that says so', async () => {
   const { env } = makeEnv({ post: null });
-  const res = await uploadUrl({ request: req('POST', { keys: [KEY], clip: { ...landscape, durationSec: 700 }, targets: [{ platform: 'tt', kind: 'video' }] }), env });
+  const res = await uploadUrl({ request: req('POST', { keys: [KEY], files: [lFile], targets: [{ platform: 'yt', kind: 'short' }] }), env });
   const data = await res.json();
   assert.equal(res.status, 400);
-  assert.match(data.error, /TikTok/);
+  assert.match(data.error, /YouTube short/);
 });
 
-test('upload-url: targets without a clip is a 400, not a silently skipped plan', async () => {
+test('upload-url: targets without files is a 400, not a silently skipped plan', async () => {
   const { env } = makeEnv({ post: null });
   const res = await uploadUrl({ request: req('POST', { keys: [KEY], targets: [{ platform: 'ig', kind: 'reel' }] }), env });
   assert.equal(res.status, 400);
