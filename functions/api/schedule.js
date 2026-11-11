@@ -67,8 +67,8 @@ export async function onRequest(context) {
     // (2200 chars is Meta's limit; YouTube's is 5000). Keeping them in this generic
     // handler is what would make it silently wrong for platform two.
     const problems = contract.validateCreate({ type, asset_keys, caption });
-    // Trial strategy: resolved HERE, when the row is created, so the cron worker never has to
-    // guess a default. No client value on an eligible reel stores the platform default.
+    // Trial strategy: validated HERE, when the row is created. No client value means NOT a trial
+    // (NULL); only an explicit, valid value makes the cron send trial_params.
     const trial = resolveTrialStrategy(contract, { type, requested: body.trial_strategy });
     problems.push(...trial.problems);
     if (problems.length) {

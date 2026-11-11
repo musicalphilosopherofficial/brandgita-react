@@ -75,16 +75,19 @@ test('every registered platform declares a `trial` key (null when unsupported)',
   }
 });
 
-test('Instagram declares reel-only trials with SS_PERFORMANCE as the default', () => {
+test('Instagram declares reel-only trials, and NO default: a trial happens only when asked for', () => {
   assert.deepEqual(
-    { kinds: [...ig().trial.kinds], strategies: [...ig().trial.strategies], default: ig().trial.default },
-    { kinds: ['reel'], strategies: ['MANUAL', 'SS_PERFORMANCE'], default: 'SS_PERFORMANCE' },
+    { kinds: [...ig().trial.kinds], strategies: [...ig().trial.strategies] },
+    { kinds: ['reel'], strategies: ['MANUAL', 'SS_PERFORMANCE'] },
   );
+  // 2026-11-12: a hardcoded default made every reel a trial and Instagram rejected the account's
+  // posts with (#10). Opting in is the caller's explicit act, never the platform's assumption.
+  assert.equal('default' in ig().trial, false);
 });
 
-test('resolve: an eligible reel with no value gets the platform default', () => {
-  assert.deepEqual(resolveTrialStrategy(ig(), { type: 'reel' }), { strategy: 'SS_PERFORMANCE', problems: [] });
-  assert.deepEqual(resolveTrialStrategy(ig(), { type: 'reel', requested: null }), { strategy: 'SS_PERFORMANCE', problems: [] });
+test('resolve: an eligible reel with no value is a NORMAL reel, not a trial', () => {
+  assert.deepEqual(resolveTrialStrategy(ig(), { type: 'reel' }), { strategy: null, problems: [] });
+  assert.deepEqual(resolveTrialStrategy(ig(), { type: 'reel', requested: null }), { strategy: null, problems: [] });
 });
 
 test('resolve: an explicit MANUAL on a reel is kept', () => {

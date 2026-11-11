@@ -61,9 +61,14 @@ function boundTrial({ sql, args }) {
   return args[vals.slice(0, i).filter((v) => v === '?').length];
 }
 
-test('POST: a reel with no trial_strategy is stored as SS_PERFORMANCE', async () => {
+test('POST: a reel with no trial_strategy is stored as NULL — a normal reel, never an implicit trial', async () => {
   const { res, inserts } = await create({});
   assert.equal(res.status, 200);
+  assert.equal(boundTrial(inserts[0]), null);
+});
+
+test('POST: a reel that explicitly asks for SS_PERFORMANCE is stored as SS_PERFORMANCE', async () => {
+  const { inserts } = await create({ trial_strategy: 'SS_PERFORMANCE' });
   assert.equal(boundTrial(inserts[0]), 'SS_PERFORMANCE');
 });
 

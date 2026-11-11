@@ -45,7 +45,9 @@ export const CONTRACTS = Object.freeze({
     trial: Object.freeze({
       kinds: Object.freeze(['reel']),
       strategies: Object.freeze(['MANUAL', 'SS_PERFORMANCE']),
-      default: 'SS_PERFORMANCE',
+      // NO default, deliberately. A trial is something the creator chooses per reel; an assumed
+      // default made every reel a trial, and Instagram rejected them with (#10) "Application does
+      // not have permission for this action" (2026-11-12, 5 retries, post failed).
     }),
 
     /**
@@ -100,7 +102,7 @@ export function supportedPlatforms() {
 /**
  * Resolve the trial strategy for a post, for create and patch alike (one rule, two callers).
  *
- *   requested undefined/null -> the platform default when the kind is trial-eligible, else none.
+ *   requested undefined/null -> not a trial (null). A trial is ONLY ever an explicit request.
  *   requested a value        -> must be a string the platform declares, on an eligible kind.
  *
  * Returns { strategy: string|null, problems: string[] }. Problems name what IS allowed, so a
@@ -117,7 +119,7 @@ export function resolveTrialStrategy(contract, { type, requested } = {}) {
   }
 
   const eligible = trial.kinds.includes(type);
-  if (noValue) return { strategy: eligible ? trial.default : null, problems: [] };
+  if (noValue) return { strategy: null, problems: [] };
 
   if (!eligible) {
     return {
