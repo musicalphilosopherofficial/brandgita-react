@@ -36,7 +36,7 @@
  */
 
 const band = (min, max) => Object.freeze({ min, max });
-const VERTICAL = band(0.5, 0.6);       // 9:16 (0.5625) with slack for encoder rounding
+const VERTICAL = band(0.551, 0.574);   // 9:16 (0.5625) ±2%, for encoder rounding only
 const LANDSCAPE = band(1.7, 1.85);     // 16:9 (1.778)
 const SQUARE = band(0.95, 1.05);       // 1:1
 const FOUR_FIVE = band(0.78, 0.82);    // 4:5 (0.8)

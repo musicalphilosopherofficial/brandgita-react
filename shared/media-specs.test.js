@@ -85,7 +85,7 @@ test('a target no supplied file fits is a problem naming the platform, what it n
   const plan = assignFiles({ files: [landscape], targets: [T('yt', 'short')] });
   assert.equal(plan.problems.length, 1);
   assert.match(plan.problems[0], /YouTube short/);
-  assert.match(plan.problems[0], /0\.5.*0\.6/s, 'names the accepted width÷height range');
+  assert.match(plan.problems[0], /0\.55.*0\.57/s, 'names the accepted width÷height range');
   assert.match(plan.problems[0], /l\b/, 'names the file that was tried');
   assert.deepEqual(plan.stored, []);
 });
@@ -146,4 +146,13 @@ test('duplicate file ids are a problem — an id must name exactly one file', ()
 test('no files at all is a problem, not an empty success', () => {
   const plan = assignFiles({ files: [], targets: [T('ig', 'reel')] });
   assert.ok(plan.problems.length >= 1);
+});
+
+test('"vertical" means 9:16 exactly (±2% for encoder rounding), not anything tall', () => {
+  const ok = [file('a', 1080, 1920), file('b', 720, 1280), file('c', 1080, 1918), file('d', 2160, 3840)];
+  const no = [file('tall', 1080, 2160), file('threeFive', 1080, 1800), file('fourFive', 1080, 1350)]; // 1:2, 3:5, 4:5
+  for (const target of [T('tt', 'video'), T('yt', 'short'), T('ig', 'reel')]) {
+    for (const f of ok) assert.deepEqual(assignFiles({ files: [f], targets: [target] }).problems, [], `${f.id} for ${target.platform}`);
+    for (const f of no) assert.equal(assignFiles({ files: [f], targets: [target] }).problems.length, 1, `${f.id} for ${target.platform}`);
+  }
 });
