@@ -21,6 +21,17 @@ function makeEnv(posts, { failDelete = () => false } = {}) {
               const [cutoff] = args;
               return { results: rows.filter((r) => r.status === 'posted' && !r.media_purged_at && r.post_at <= cutoff) };
             },
+            // AUDIT NOTE 2026-11-12: purge now asks "does any OTHER post still use this key?" before
+            // deleting (shared/media-refs.js — one clip can serve several platforms). This fake had no
+            // `first()`, so that lookup threw and the key was (correctly) kept. It now answers the lookup
+            // from `rows`, mirroring the real query: another, not-yet-purged row listing the key or
+            // using it as its cover. Sharing itself is tested against real SQLite in media-refs.test.js.
+            async first() {
+              const [excludeId, key] = args;
+              const hit = rows.find((r) => r.id !== excludeId && !r.media_purged_at
+                && (r.cover_key === key || (r.asset_keys || '').includes(JSON.stringify(key))));
+              return hit ? { n: 1 } : null;
+            },
             async run() {
               const [at, id] = args;
               const r = rows.find((x) => x.id === id);

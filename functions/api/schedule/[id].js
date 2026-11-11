@@ -1,5 +1,6 @@
 import { requireUserAuth } from '../_auth.js';
 import { contractFor, resolveTrialStrategy } from '../../../shared/platform-contracts.js';
+import { deleteUnreferencedMedia } from '../../../shared/media-refs.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -100,16 +101,9 @@ export async function onRequest(context) {
     assetKeys.push(post.cover_key);
   }
 
-  // Best-effort R2 cleanup — don't fail the response if storage delete errors
-  const deleteErrors = [];
-  for (const key of assetKeys) {
-    try {
-      await env.SCHEDULE_BUCKET.delete(key);
-    } catch (err) {
-      console.error(`R2 delete error for key '${key}':`, err);
-      deleteErrors.push(key);
-    }
-  }
+  // Best-effort R2 cleanup — don't fail the response if storage delete errors. A clip another post
+  // (another platform) still uses is KEPT: see shared/media-refs.js.
+  const { failed: deleteErrors } = await deleteUnreferencedMedia(env, assetKeys, { excludePostId: id });
 
   if (deleteErrors.length > 0) {
     // Row is gone; surface the storage issue as a warning, not a failure
@@ -292,15 +286,7 @@ async function handlePatch(context) {
     ...(asset_keys !== undefined ? oldAssets : []),
     ...(cover_key !== undefined && post.cover_key ? [post.cover_key] : []),
   ].filter((k) => !keep.has(k));
-  const deleteErrors = [];
-  for (const key of replaced) {
-    try {
-      await env.SCHEDULE_BUCKET.delete(key);
-    } catch (err) {
-      console.error(`R2 delete error for replaced key '${key}':`, { message: err?.message });
-      deleteErrors.push(key);
-    }
-  }
+  const { failed: deleteErrors } = await deleteUnreferencedMedia(env, replaced, { excludePostId: id });
 
   const out = {
     ok: true,

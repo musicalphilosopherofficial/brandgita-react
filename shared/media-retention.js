@@ -19,6 +19,8 @@
  * on the next daily run rather than leaving media behind with the row claiming it is gone.
  */
 
+import { deleteUnreferencedMedia } from './media-refs.js';
+
 export const MEDIA_RETENTION_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -49,17 +51,12 @@ export async function purgePostedMedia(env, now = Date.now()) {
     }
     if (row.cover_key) keys.push(row.cover_key);
 
-    let ok = true;
-    for (const key of keys) {
-      try {
-        await env.SCHEDULE_BUCKET.delete(key);
-        out.objects += 1;
-      } catch (err) {
-        ok = false;
-        console.error(`media-retention: R2 delete failed for '${key}':`, { message: err?.message });
-      }
-    }
-    if (!ok) { out.failed += 1; continue; }
+    // A clip can be shared with other posts (one upload, many platforms): it is only deleted when this
+    // is the LAST post still holding it. `kept` is not a failure — this post is still marked purged,
+    // and whichever sibling purges last removes the file.
+    const res = await deleteUnreferencedMedia(env, keys, { excludePostId: row.id });
+    out.objects += res.deleted.length;
+    if (res.failed.length) { out.failed += 1; continue; }
 
     try {
       await env.DB.prepare(`UPDATE scheduled_posts SET media_purged_at = ? WHERE id = ?`)

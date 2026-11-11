@@ -24,6 +24,11 @@ function makeEnv({ post = null, existing = [] } = {}) {
                 if (sql.includes('ig_tokens')) {
                   return { ig_user_id: OWNER, desktop_token_created_at: new Date().toISOString() };
                 }
+                // AUDIT NOTE 2026-11-12: the replaced-media cleanup now asks whether another post still
+                // uses a key (shared/media-refs.js). In these tests no other post exists, so that lookup
+                // answers "nobody"; without this branch the fake returned `post` for it and every
+                // cleanup looked shared. Sharing is covered in schedule.shared-media.test.js.
+                if (sql.includes('instr(')) return null;
                 if (sql.includes('scheduled_posts')) {
                   return post; // may be null → "not found"
                 }

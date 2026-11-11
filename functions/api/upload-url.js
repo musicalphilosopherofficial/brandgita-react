@@ -1,4 +1,5 @@
 import { requireUserAuth } from './_auth.js';
+import { planRenditions } from '../../shared/media-specs.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -51,6 +52,19 @@ export async function onRequest(context) {
     }
   }
 
+  // Optional: where will this clip be posted? One stored file per distinct ASPECT, not per platform
+  // (shared/media-specs.js). Omitted entirely for older clients, which get the same response as before.
+  let plan;
+  if (body.clip !== undefined || body.targets !== undefined) {
+    if (body.clip === undefined) {
+      return json({ ok: false, error: 'targets needs a clip ({width, height, durationSec, bytes}) to plan against' }, 400);
+    }
+    plan = planRenditions({ clip: body.clip, targets: body.targets });
+    if (plan.problems.length) {
+      return json({ ok: false, error: plan.problems.join('; ') }, 400);
+    }
+  }
+
   const origin = new URL(request.url).origin;
 
   const uploads = keys.map((key) => ({
@@ -58,5 +72,5 @@ export async function onRequest(context) {
     upload_url: `${origin}/api/media/${encodeURIComponent(key)}`,
   }));
 
-  return json({ ok: true, uploads });
+  return json(plan ? { ok: true, uploads, plan } : { ok: true, uploads });
 }
