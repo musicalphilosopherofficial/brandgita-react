@@ -18,12 +18,13 @@
  * SPEC FIELDS
  *   nativeAspect  width/height the platform is built around (9/16 = vertical). Used only as the
  *                 tie-break when two files both fit: the one nearest native wins.
- *   aspectBand    the width/height range a file may have and be posted AS-IS.
- *     Founder-stated (2026-11-12, twice corrected): ONLY Instagram and YouTube long-form accept
- *     16:9; TikTok and YouTube Shorts are vertical (Shorts also accept square). These bands are the
- *     founder's rule and were NOT derived from API docs — Meta's Reels page gave no aspect numbers,
- *     and TikTok's docs state none; widening a band from "the docs don't forbid it" was the mistake
- *     that was corrected.
+ *   aspectBands   the width/height ranges a file may have and be posted AS-IS (a LIST: a Reel takes
+ *                 vertical and 16:9 but not the square between them).
+ *     Founder-stated (2026-11-12, corrected three times): IG Reel = vertical or 16:9; IG carousel
+ *     = 1:1 or 4:5 (for now); TikTok and YouTube Short = vertical only; YouTube video = 16:9. These
+ *     bands are the founder's rule and were NOT derived from API docs — Meta's Reels page gave no
+ *     aspect numbers and TikTok's docs state none; widening a band from "the docs don't forbid it"
+ *     was the mistake that was corrected.
  *   maxDurationSec, maxBytes, minPx, maxPx   HARD limits, present only where the platform's own docs
  *     state them (checked 2026-11-12). Absent = not enforced here, NOT "no limit".
  *       TikTok  developers.tiktok.com/doc/content-posting-api-media-transfer-guide
@@ -34,23 +35,30 @@
  * every layer; 'tt' is TikTok's.
  */
 
-const VERTICAL_BAND = Object.freeze({ min: 0.5, max: 0.6 });   // 9:16 (0.5625) with slack for encoder rounding
-const IG_REEL_BAND = Object.freeze({ min: 0.5, max: 1.8 });    // vertical through 16:9 (1.778)
+const band = (min, max) => Object.freeze({ min, max });
+const VERTICAL = band(0.5, 0.6);       // 9:16 (0.5625) with slack for encoder rounding
+const LANDSCAPE = band(1.7, 1.85);     // 16:9 (1.778)
+const SQUARE = band(0.95, 1.05);       // 1:1
+const FOUR_FIVE = band(0.78, 0.82);    // 4:5 (0.8)
 
 export const MEDIA_SPECS = Object.freeze({
   ig: Object.freeze({
-    reel: Object.freeze({ nativeAspect: 9 / 16, aspectBand: IG_REEL_BAND }),
+    // A Reel takes vertical or 16:9 — NOT square or 4:5 (founder, 2026-11-12).
+    reel: Object.freeze({ nativeAspect: 9 / 16, aspectBands: Object.freeze([VERTICAL, LANDSCAPE]) }),
+    // Carousels take 1:1 and 4:5 for now (founder, 2026-11-12). Note: this entry judges ONE file; a
+    // carousel is 2–10 slides and each slide is checked separately by the caller.
+    carousel: Object.freeze({ nativeAspect: 1, aspectBands: Object.freeze([SQUARE, FOUR_FIVE]) }),
   }),
   tt: Object.freeze({
     video: Object.freeze({
-      nativeAspect: 9 / 16, aspectBand: VERTICAL_BAND,
+      nativeAspect: 9 / 16, aspectBands: Object.freeze([VERTICAL]),
       maxDurationSec: 600, maxBytes: 4 * 1024 ** 3, minPx: 360, maxPx: 4096,
     }),
   }),
   yt: Object.freeze({
-    // A Short is vertical or square and at most 3 minutes.
-    short: Object.freeze({ nativeAspect: 9 / 16, aspectBand: Object.freeze({ min: 0.4, max: 1.0 }), maxDurationSec: 180 }),
-    video: Object.freeze({ nativeAspect: 16 / 9, aspectBand: Object.freeze({ min: 1.2, max: 2.4 }) }),
+    // A Short is vertical and at most 3 minutes (square is NOT accepted — founder, 2026-11-12).
+    short: Object.freeze({ nativeAspect: 9 / 16, aspectBands: Object.freeze([VERTICAL]), maxDurationSec: 180 }),
+    video: Object.freeze({ nativeAspect: 16 / 9, aspectBands: Object.freeze([LANDSCAPE]) }),
   }),
 });
 
@@ -68,9 +76,9 @@ function supportedList() {
 /** Why `file` cannot serve a platform with `spec`, or null when it can. */
 function whyNot(file, spec) {
   const aspect = file.width / file.height;
-  const { min, max } = spec.aspectBand;
-  if (aspect < min || aspect > max) {
-    return `${file.id} is ${file.width}x${file.height} (width÷height ${round2(aspect)}), which is outside ${round2(min)}–${round2(max)}`;
+  if (!spec.aspectBands.some((b) => aspect >= b.min && aspect <= b.max)) {
+    const wants = spec.aspectBands.map((b) => `${round2(b.min)}–${round2(b.max)}`).join(' or ');
+    return `${file.id} is ${file.width}x${file.height} (width÷height ${round2(aspect)}), which is outside ${wants}`;
   }
   if (spec.maxDurationSec && finitePositive(file.durationSec) && file.durationSec > spec.maxDurationSec) {
     return `${file.id} is ${Math.round(file.durationSec)}s but the limit is ${spec.maxDurationSec}s`;

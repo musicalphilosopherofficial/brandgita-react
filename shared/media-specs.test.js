@@ -16,13 +16,36 @@ const T = (platform, kind) => ({ platform, kind });
 const stored = (plan) => plan.stored.map((f) => f.id);
 const usedBy = (plan, id) => plan.stored.find((f) => f.id === id).targets.map((t) => `${t.platform}:${t.kind}`).sort();
 
-test('every spec declares a native aspect and an accepted band containing it', () => {
+test('every spec declares a native aspect that sits inside one of its own accepted bands', () => {
   for (const [p, kinds] of Object.entries(MEDIA_SPECS)) {
     for (const [k, s] of Object.entries(kinds)) {
       assert.ok(s.nativeAspect > 0, `${p}.${k} nativeAspect`);
-      assert.ok(s.aspectBand.min <= s.nativeAspect && s.nativeAspect <= s.aspectBand.max, `${p}.${k} band must contain its own native aspect`);
+      assert.ok(Array.isArray(s.aspectBands) && s.aspectBands.length > 0, `${p}.${k} aspectBands`);
+      assert.ok(s.aspectBands.some((b) => b.min <= s.nativeAspect && s.nativeAspect <= b.max), `${p}.${k} native aspect must be accepted`);
     }
   }
+});
+
+test('a SQUARE (1:1) file is not accepted for an IG reel or a YouTube Short', () => {
+  for (const target of [T('ig', 'reel'), T('yt', 'short')]) {
+    const plan = assignFiles({ files: [square], targets: [target] });
+    assert.equal(plan.problems.length, 1, `${target.platform}:${target.kind}`);
+    assert.deepEqual(plan.stored, []);
+  }
+});
+
+test('an IG reel still accepts both vertical and 16:9, but nothing in between', () => {
+  assert.deepEqual(assignFiles({ files: [vertical], targets: [T('ig', 'reel')] }).problems, []);
+  assert.deepEqual(assignFiles({ files: [landscape], targets: [T('ig', 'reel')] }).problems, []);
+  const fourFive = file('f', 1080, 1350); // 4:5, the gap between vertical and square
+  assert.equal(assignFiles({ files: [fourFive], targets: [T('ig', 'reel')] }).problems.length, 1);
+});
+
+test('an IG carousel takes 1:1 and 4:5 for now, and not vertical or landscape', () => {
+  assert.deepEqual(assignFiles({ files: [square], targets: [T('ig', 'carousel')] }).problems, []);
+  assert.deepEqual(assignFiles({ files: [file('f', 1080, 1350)], targets: [T('ig', 'carousel')] }).problems, []);
+  assert.equal(assignFiles({ files: [vertical], targets: [T('ig', 'carousel')] }).problems.length, 1);
+  assert.equal(assignFiles({ files: [landscape], targets: [T('ig', 'carousel')] }).problems.length, 1);
 });
 
 test('ONE vertical file serves IG reel + TikTok + YouTube Short, and is stored once', () => {
@@ -62,7 +85,7 @@ test('a target no supplied file fits is a problem naming the platform, what it n
   const plan = assignFiles({ files: [landscape], targets: [T('yt', 'short')] });
   assert.equal(plan.problems.length, 1);
   assert.match(plan.problems[0], /YouTube short/);
-  assert.match(plan.problems[0], /0\.4.*1/s, 'names the accepted width÷height range');
+  assert.match(plan.problems[0], /0\.5.*0\.6/s, 'names the accepted width÷height range');
   assert.match(plan.problems[0], /l\b/, 'names the file that was tried');
   assert.deepEqual(plan.stored, []);
 });
