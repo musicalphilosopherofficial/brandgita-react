@@ -110,6 +110,27 @@ test('initVideoPost sends the creator\'s choices and file-upload source', async 
   assert.equal(out.publish_id, 'p1');
 });
 
+const coverSent = async (extra) => {
+  const { f, calls } = record({ data: { publish_id: 'p1' }, error: { code: 'ok' } });
+  await initVideoPost('AT', { title: 't', privacy_level: 'SELF_ONLY', video_size: 30, chunk_size: 30, total_chunk_count: 1, ...extra }, f);
+  return JSON.parse(calls[0].init.body).post_info;
+};
+
+test('initVideoPost: cover_timestamp_ms becomes video_cover_timestamp_ms, including 0 (a falsy but valid frame)', async () => {
+  assert.equal((await coverSent({ cover_timestamp_ms: 1500 })).video_cover_timestamp_ms, 1500);
+  assert.equal((await coverSent({ cover_timestamp_ms: 0 })).video_cover_timestamp_ms, 0);
+});
+
+test('initVideoPost: no cover value means the field is omitted so TikTok uses its default first frame', async () => {
+  assert.equal('video_cover_timestamp_ms' in (await coverSent({})), false);
+});
+
+test('initVideoPost: an invalid cover value (negative, fractional, string, null) is dropped, never forwarded', async () => {
+  for (const bad of [-1, 1.5, '1500', null, NaN, {}]) {
+    assert.equal('video_cover_timestamp_ms' in (await coverSent({ cover_timestamp_ms: bad })), false, String(bad));
+  }
+});
+
 test('initPhotoPost pulls images from the allowed asset host only', async () => {
   const { f, calls } = record({ data: { publish_id: 'p2' }, error: { code: 'ok' } });
   await initPhotoPost('AT', { title: 't', privacy_level: 'SELF_ONLY', image_urls: ['https://assets.brandgita.com/tiktok/abc/1.jpg'] }, f);

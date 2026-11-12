@@ -130,7 +130,7 @@ function postInfo(p) {
   // No default privacy: TikTok's UX rules require the creator to pick, so a missing choice is
   // refused here rather than quietly filled in.
   if (!p.privacy_level) throw new Error('privacy_level is required — the creator must choose who can see the post');
-  return {
+  const info = {
     title: p.title || '',
     privacy_level: p.privacy_level,
     disable_comment: p.disable_comment !== false,
@@ -139,6 +139,9 @@ function postInfo(p) {
     brand_content_toggle: p.brand_content_toggle === true,
     brand_organic_toggle: p.brand_organic_toggle === true,
   };
+  // Cover frame in ms (TikTok's video_cover_timestamp_ms). Omitted = TikTok uses the first frame.
+  if (Number.isInteger(p.cover_timestamp_ms) && p.cover_timestamp_ms >= 0) info.video_cover_timestamp_ms = p.cover_timestamp_ms;
+  return info;
 }
 
 export async function initVideoPost(accessToken, p, fetchImpl = fetch) {
