@@ -50,7 +50,7 @@ beforeEach(() => {
     const u = String(url);
     if (u.includes('whop')) {
       return u.includes('good-licence')
-        ? { ok: true, status: 200, json: async () => ({ id: 'mem_1', user: 'user_1', valid: true, status: 'active' }) }
+        ? { ok: true, status: 200, json: async () => ({ id: 'mem_1', user_id: 'user_1', status: 'active' }) }
         : { ok: false, status: 404, json: async () => ({}) };
     }
     googleCalls.push({ url: u, init });

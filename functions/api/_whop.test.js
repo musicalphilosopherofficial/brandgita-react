@@ -9,10 +9,11 @@ function mockFetch(status, body) {
 
 test('an active membership is accepted and its identity extracted', async () => {
   globalThis.fetch = mockFetch(200, {
-    id: 'mem_abc', status: 'active', valid: true, user: 'user_1', email: 'a@b.com',
+    id: 'mem_abc', status: 'active', user_id: 'user_1',
   });
   const r = await checkWhopLicense('lic_valid', { WHOP_COMPANY_API: 'k' });
-  assert.deepEqual(r, { ok: true, membershipId: 'mem_abc', whopUserId: 'user_1', email: 'a@b.com', metadata: {}, status: 'active' });
+  // v1 has no email field, so email is always null.
+  assert.deepEqual(r, { ok: true, membershipId: 'mem_abc', whopUserId: 'user_1', email: null, metadata: {}, status: 'active' });
 });
 
 test('a 404 from Whop -> 402 "not found", not a raw pass-through', async () => {
@@ -22,20 +23,19 @@ test('a 404 from Whop -> 402 "not found", not a raw pass-through', async () => {
   assert.equal(r.status, 402);
 });
 
-test('a cancelled membership (valid:false) is rejected even though Whop found it', async () => {
-  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'canceled', valid: false, user: 'u' });
+test('a cancelled membership is rejected even though Whop found it', async () => {
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'canceled', user_id: 'u' });
   const r = await checkWhopLicense('lic_cancelled', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 402);
 });
 
-test('REGRESSION: status="completed" + valid:true is ACCEPTED — a real trial membership on '
-  + 'this account returns exactly this shape, and gating on status alone would reject it', async () => {
-  // Pinned to a real API response captured 2026-08-22 (membership mem_oBHeJeRZNqmKUl),
-  // not a guess — status vocabulary varies by plan/payment type and is not the signal.
+test('REGRESSION: status="completed" is ACCEPTED — a real free-trial membership on this '
+  + 'account reported exactly this status (v2 also said valid:true), so it must stay entitled', async () => {
+  // Status captured from a real v2 response 2026-08-22 (membership mem_oBHeJeRZNqmKUl).
+  // v1 has no `valid`, so the status allow-list is the gate; `completed` must be in it.
   globalThis.fetch = mockFetch(200, {
-    id: 'mem_oBHeJeRZNqmKUl', status: 'completed', valid: true,
-    user: 'user_mvI3tlVgBiCNU', email: 'utsavother16@gmail.com',
+    id: 'mem_oBHeJeRZNqmKUl', status: 'completed', user_id: 'user_mvI3tlVgBiCNU',
   });
   const r = await checkWhopLicense('B-1D6B09-5C997A94-F155F5W', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, true);
@@ -64,8 +64,8 @@ test('a network failure fails CLOSED — unreachable Whop must not grant access'
   assert.equal(r.status, 502);
 });
 
-test('a malformed 200 (no user field at all) is rejected rather than trusted', async () => {
-  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'active', valid: true });
+test('a malformed 200 (no user_id field at all) is rejected rather than trusted', async () => {
+  globalThis.fetch = mockFetch(200, { id: 'mem_x', status: 'active' });
   const r = await checkWhopLicense('lic_x', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 502);
@@ -75,32 +75,90 @@ test('the license key is URL-encoded into the request path', async () => {
   let capturedUrl;
   globalThis.fetch = async (url) => {
     capturedUrl = url;
-    return new Response(JSON.stringify({ id: 'm', status: 'active', valid: true, user: 'u' }), { status: 200 });
+    return new Response(JSON.stringify({ id: 'm', status: 'active', user_id: 'u' }), { status: 200 });
   };
   await checkWhopLicense('lic/with spaces', { WHOP_COMPANY_API: 'k' });
   assert.ok(!capturedUrl.includes('lic/with spaces'));
   assert.ok(capturedUrl.includes(encodeURIComponent('lic/with spaces')));
 });
 
+test('v1 migration: GET hits /api/v1 with Bearer auth and the Api-Version-Date pin', async () => {
+  let url, headers;
+  globalThis.fetch = async (u, opts) => {
+    url = String(u); headers = opts.headers;
+    return new Response(JSON.stringify({ id: 'm', status: 'active', user_id: 'u' }), { status: 200 });
+  };
+  await checkWhopLicense('lic_x', { WHOP_COMPANY_API: 'k' });
+  assert.ok(url.startsWith('https://api.whop.com/api/v1/memberships/'));
+  assert.equal(headers.Authorization, 'Bearer k');
+  assert.match(headers['Api-Version-Date'], /^\d{4}-\d{2}-\d{2}/);
+});
+
+for (const st of ['trialing', 'active', 'completed']) {
+  test(`status "${st}" is entitled`, async () => {
+    globalThis.fetch = mockFetch(200, { id: 'm', status: st, user_id: 'u' });
+    assert.equal((await checkWhopLicense('l', { WHOP_COMPANY_API: 'k' })).ok, true);
+  });
+}
+for (const st of ['past_due', 'unresolved', 'canceled', 'expired', undefined]) {
+  test(`status "${st}" is denied (fails closed)`, async () => {
+    globalThis.fetch = mockFetch(200, { id: 'm', status: st, user_id: 'u' });
+    const r = await checkWhopLicense('l', { WHOP_COMPANY_API: 'k' });
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 402);
+  });
+}
+
 // ── validateDevice ────────────────────────────────────────────────────────────
 
 import { validateDevice } from './_whop.js';
 
-test('201 from Whop means the device is valid (first use or matching)', async () => {
-  globalThis.fetch = mockFetch(201, {});
+// v1 device lock: GET membership -> compare metadata.hwid -> PATCH on first use.
+function deviceFetch({ metadata = {}, getStatus = 200, patchStatus = 200 } = {}) {
+  const calls = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    calls.push({ url: String(url), method: opts.method || 'GET', headers: opts.headers, body: opts.body });
+    if (opts.method === 'PATCH') return new Response('{}', { status: patchStatus });
+    return new Response(JSON.stringify({ id: 'mem_x', status: 'active', user_id: 'u', metadata }), { status: getStatus });
+  };
+  return calls;
+}
+
+test('first use (no hwid stored) binds the device via PATCH and succeeds', async () => {
+  const calls = deviceFetch();
   const r = await validateDevice('mem_x', 'hash123', { WHOP_COMPANY_API: 'k' });
   assert.deepEqual(r, { ok: true });
+  assert.deepEqual(calls.map((c) => c.method), ['GET', 'PATCH']);
+  assert.ok(calls.every((c) => c.url.startsWith('https://api.whop.com/api/v1/memberships/mem_x')));
+  assert.ok(calls.every((c) => c.headers['Api-Version-Date']));
 });
 
-test('400 means the licence is bound to a DIFFERENT device', async () => {
-  globalThis.fetch = mockFetch(400, {});
+test('the SAME device again succeeds without writing anything', async () => {
+  const calls = deviceFetch({ metadata: { hwid: 'hash123' } });
+  const r = await validateDevice('mem_x', 'hash123', { WHOP_COMPANY_API: 'k' });
+  assert.deepEqual(r, { ok: true });
+  assert.deepEqual(calls.map((c) => c.method), ['GET']);
+});
+
+test('a licence bound to a DIFFERENT device is rejected with 409 and never overwritten', async () => {
+  const calls = deviceFetch({ metadata: { hwid: 'other' } });
   const r = await validateDevice('mem_x', 'hash123', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 409);
+  assert.deepEqual(calls.map((c) => c.method), ['GET']);
 });
 
-test('401 (missing member:manage) fails closed with 502, never treated as valid', async () => {
-  globalThis.fetch = mockFetch(401, {});
+test('401/403 on the bind PATCH (missing member:manage) fails closed with 502', async () => {
+  for (const patchStatus of [401, 403]) {
+    deviceFetch({ patchStatus });
+    const r = await validateDevice('mem_x', 'hash123', { WHOP_COMPANY_API: 'k' });
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 502);
+  }
+});
+
+test('403 on the membership lookup fails closed with 502', async () => {
+  deviceFetch({ getStatus: 403 });
   const r = await validateDevice('mem_x', 'hash123', { WHOP_COMPANY_API: 'k' });
   assert.equal(r.ok, false);
   assert.equal(r.status, 502);
@@ -121,17 +179,11 @@ test('missing WHOP_COMPANY_API fails closed with 503', async () => {
 });
 
 test('sends the metadata under Whop\'s own `hwid` key, not an invented one', async () => {
-  // This is not a style preference — an earlier version used `device_hash`, and every
-  // call against a REAL, already-bound membership came back as a mismatch even for the
-  // identical value, because Whop compares the whole metadata object and the key
-  // differed from whatever was already stored. Confirmed live 2026-08-22.
-  let capturedBody;
-  globalThis.fetch = async (url, opts) => {
-    capturedBody = JSON.parse(opts.body);
-    return new Response('{}', { status: 201 });
-  };
+  // An earlier version used `device_hash`, and every call against a REAL, already-bound
+  // membership came back as a mismatch because the key differed from what was stored.
+  const calls = deviceFetch();
   await validateDevice('mem_x', 'the-hash', { WHOP_COMPANY_API: 'k' });
-  assert.deepEqual(capturedBody, { metadata: { hwid: 'the-hash' } });
+  assert.deepEqual(JSON.parse(calls.find((c) => c.method === 'PATCH').body), { metadata: { hwid: 'the-hash' } });
 });
 
 test('a network failure fails closed', async () => {
@@ -147,7 +199,7 @@ import { resetDeviceLock } from './_whop.js';
 
 function membershipResponse(overrides = {}) {
   return {
-    id: 'mem_x', status: 'active', valid: true, user: 'u', email: 'e@x.com',
+    id: 'mem_x', status: 'active', user_id: 'u',
     metadata: {}, ...overrides,
   };
 }
@@ -216,7 +268,7 @@ test('a DEAD subscription cannot consume a reset — rejected before touching D1
   let patchCalled = false;
   globalThis.fetch = async (url, opts) => {
     if (opts?.method === 'PATCH') { patchCalled = true; return new Response('{}', { status: 200 }); }
-    return new Response(JSON.stringify(membershipResponse({ valid: false, status: 'canceled' })), { status: 200 });
+    return new Response(JSON.stringify(membershipResponse({ status: 'canceled' })), { status: 200 });
   };
   const r = await resetDeviceLock('lic_x', { WHOP_COMPANY_API: 'k', DB: fakeDB() });
   assert.equal(r.ok, false);
@@ -235,7 +287,7 @@ test('the PATCH body is always an unconditional empty wipe — never a merge att
   assert.deepEqual(patchBody, { metadata: {} });
 });
 
-test('the PATCH targets the v1 endpoint, not v2 — v2 needs a permission that never worked', async () => {
+test('the PATCH targets the v1 endpoint (v2 sunsets 2026-11-13)', async () => {
   let capturedUrl;
   globalThis.fetch = async (url, opts) => {
     if (opts?.method === 'PATCH') { capturedUrl = url; return new Response('{}', { status: 200 }); }

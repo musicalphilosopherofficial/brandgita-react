@@ -30,7 +30,7 @@ function ctx(body, { secret = 'test-secret', method = 'POST' } = {}) {
 }
 
 function membershipResponse(overrides = {}) {
-  return { id: 'mem_x', status: 'active', valid: true, user: 'u', email: 'e@x.com', metadata: {}, ...overrides };
+  return { id: 'mem_x', status: 'active', user_id: 'u', metadata: {}, ...overrides };
 }
 
 test('a valid reset succeeds end to end through the real route', async () => {
@@ -68,7 +68,7 @@ test('a cooldown rejection from resetDeviceLock passes through as 429', async ()
 });
 
 test('an invalid license passes through the friendly status-labelled error', async () => {
-  globalThis.fetch = async () => new Response(JSON.stringify(membershipResponse({ valid: false, status: 'expired' })), { status: 200 });
+  globalThis.fetch = async () => new Response(JSON.stringify(membershipResponse({ status: 'expired' })), { status: 200 });
   const res = await onRequest(ctx({ license_key: 'lic_dead' }));
   const data = await res.json();
   assert.equal(res.status, 402);

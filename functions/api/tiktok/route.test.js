@@ -42,7 +42,7 @@ beforeEach(() => {
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
     if (u.includes('whop')) {
-      if (u.includes('good-licence')) return { ok: true, status: 200, json: async () => ({ id: 'mem_1', user: 'user_1', valid: true, status: 'active' }) };
+      if (u.includes('good-licence')) return { ok: true, status: 200, json: async () => ({ id: 'mem_1', user_id: 'user_1', status: 'active' }) };
       return { ok: false, status: 404, json: async () => ({}) };
     }
     tiktokCalls.push({ url: u, init });

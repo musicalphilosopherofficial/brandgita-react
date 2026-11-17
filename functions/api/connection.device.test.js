@@ -35,12 +35,14 @@ function makeEnv({ licenseKey = 'lic_x', whopStatus = 201 } = {}) {
       };
     },
   };
-  globalThis.fetch = async (url) => {
-    if (String(url).includes('validate_license')) {
-      return new Response('{}', { status: whopStatus });
-    }
+  // v1 device check: GET the membership (compare metadata.hwid), then PATCH to bind on first
+  // use. `whopStatus` 400 = "already bound to another machine"; anything else = the status
+  // the bind PATCH answers with.
+  globalThis.fetch = async (url, opts) => {
     if (String(url).includes('api.whop.com')) {
-      return new Response(JSON.stringify({ id: 'mem_x', valid: true, user: 'u' }), { status: 200 });
+      if (opts?.method === 'PATCH') return new Response('{}', { status: whopStatus });
+      const metadata = whopStatus === 400 ? { hwid: 'another-machine' } : {};
+      return new Response(JSON.stringify({ id: 'mem_x', status: 'active', user_id: 'u', metadata }), { status: 200 });
     }
     // Meta's publishing-limit probe
     return new Response(JSON.stringify({ data: [{ quota_usage: 1, config: { quota_total: 50 } }] }), { status: 200 });

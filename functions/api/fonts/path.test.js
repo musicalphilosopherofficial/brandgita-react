@@ -16,8 +16,8 @@ function makeEnv({ objects = {}, whopOk = true, whopStatus = 402 } = {}) {
     status: 200,
     json: async () =>
       whopOk
-        ? { id: 'mem_1', user: 'user_1', email: 'a@b.com', valid: true, status: 'active' }
-        : { valid: false, status: 'canceled' },
+        ? { id: 'mem_1', user_id: 'user_1', status: 'active' }
+        : { status: 'canceled' },
   });
   return {
     WHOP_COMPANY_API: 'test-whop-key',

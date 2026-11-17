@@ -16,13 +16,12 @@ const ENV = {
 // Every test's IG code implies an active Whop membership by default — the OAuth
 // flow's own tests are not testing licensing, so this keeps them from having to
 // know about it. Tests of the license gate itself override with a specific handler.
-function whopActiveMock(url) {
+function whopActiveMock(url, opts) {
   const u = String(url);
-  if (u.includes('validate_license')) {
-    return { status: 201, ok: true, json: async () => ({}) };
-  }
   if (u.includes('api.whop.com')) {
-    return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: 'whopuser_test', email: 'c@example.com' }) };
+    // v1: the device bind is a PATCH on the membership; the licence check is a GET.
+    if (opts?.method === 'PATCH') return { status: 200, ok: true, json: async () => ({}) };
+    return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', user_id: 'whopuser_test', metadata: {} }) };
   }
   return null;
 }
@@ -51,9 +50,9 @@ function makeContext(body, { secret = 'test-secret', db = fakeDB() } = {}) {
 
 // Install a fetch mock that answers IG's two endpoints in sequence.
 function mockFetch(handlers) {
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, opts) => {
     const u = String(url);
-    const whop = whopActiveMock(u);
+    const whop = whopActiveMock(u, opts);
     if (whop) return whop;
     for (const [match, resp] of handlers) {
       if (u.includes(match)) {
@@ -66,9 +65,9 @@ function mockFetch(handlers) {
 
 test('code path: exchanges code → short-lived → long-lived, returns ig_user_id', async () => {
   const seen = [];
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, opts) => {
     seen.push(String(url));
-    const whop = whopActiveMock(url);
+    const whop = whopActiveMock(url, opts);
     if (whop) return whop;
     if (String(url).includes('api.instagram.com/oauth/access_token')) {
       return { ok: true, json: async () => ({ access_token: 'short-tok', user_id: 178414 }) };
@@ -104,9 +103,9 @@ test('code path: exchanges code → short-lived → long-lived, returns ig_user_
 
 test('legacy path: {ig_user_id, short_lived_token} skips code exchange', async () => {
   const seen = [];
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, opts) => {
     seen.push(String(url));
-    const whop = whopActiveMock(url);
+    const whop = whopActiveMock(url, opts);
     if (whop) return whop;
     if (String(url).includes('graph.instagram.com/v22.0/me')) {
       return { ok: true, json: async () => ({ username: 'legacy.handle' }) };
@@ -125,8 +124,8 @@ test('legacy path: {ig_user_id, short_lived_token} skips code exchange', async (
 
 test('missing both code and short_lived_token → 400', async () => {
   // The license check legitimately calls Whop first; IG must never be reached.
-  globalThis.fetch = async (url) => {
-    const whop = whopActiveMock(url);
+  globalThis.fetch = async (url, opts) => {
+    const whop = whopActiveMock(url, opts);
     if (whop) return whop;
     throw new Error('should not fetch Instagram');
   };
@@ -159,7 +158,7 @@ test('a lapsed/invalid license_key blocks connect BEFORE the OAuth code is consu
   globalThis.fetch = async (url) => {
     seen.push(String(url));
     if (String(url).includes('api.whop.com')) {
-      return { ok: true, json: async () => ({ id: 'mem_x', status: 'canceled', valid: false, user: 'u' }) };
+      return { ok: true, json: async () => ({ id: 'mem_x', status: 'canceled', user_id: 'u' }) };
     }
     throw new Error('IG must never be reached if the license is invalid');
   };
@@ -213,9 +212,9 @@ test('the stored row links back to the Whop license + membership', async () => {
 test('a licence already bound to a DIFFERENT device is rejected with 409', async () => {
   globalThis.fetch = async (url) => {
     const u = String(url);
-    if (u.includes('validate_license')) return { status: 400, ok: false, json: async () => ({}) };
     if (u.includes('api.whop.com')) {
-      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: 'u' }) };
+      // already bound to another machine's hash
+      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', user_id: 'u', metadata: { hwid: 'some-other-machine' } }) };
     }
     throw new Error('IG must never be reached once the device check fails');
   };
@@ -240,12 +239,12 @@ test('missing device_hash is rejected with 400 — no silent skip of the lock', 
   assert.equal(res.status, 400);
 });
 
-test('a 401 from validate_license (missing member:manage) fails closed, not open', async () => {
-  globalThis.fetch = async (url) => {
+test('a 401 from the device-bind PATCH (missing member:manage) fails closed, not open', async () => {
+  globalThis.fetch = async (url, opts) => {
     const u = String(url);
-    if (u.includes('validate_license')) return { status: 401, ok: false, json: async () => ({}) };
     if (u.includes('api.whop.com')) {
-      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', valid: true, user: 'u' }) };
+      if (opts?.method === 'PATCH') return { status: 401, ok: false, json: async () => ({}) };
+      return { ok: true, json: async () => ({ id: 'mem_test', status: 'active', user_id: 'u', metadata: {} }) };
     }
     throw new Error('IG must never be reached if the device check cannot be performed');
   };
@@ -309,11 +308,11 @@ test('NO secret WITHOUT that assertion is refused — fail closed', async () => 
 
 test('an INVALID licence is still refused when no secret is sent', async () => {
   // Removing the app-level check must not weaken the customer-level one.
-  global.fetch = mockFetch((url) => {
+  global.fetch = mockFetch((url, opts) => {
     if (String(url).includes('api.whop.com')) {
-      return { ok: false, status: 404, json: async () => ({ valid: false }) };
+      return { ok: false, status: 404, json: async () => ({}) };
     }
-    return whopActiveMock(url);
+    return whopActiveMock(url, opts);
   });
   const ctx = makeContext({ code: 'OAUTH_CODE' }, { secret: null });
   ctx.env.TOKEN_PUBLIC_OK = '1';
