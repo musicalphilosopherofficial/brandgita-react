@@ -1,4 +1,5 @@
 import { mediaSlug, requireUserAuth } from '../_auth.js';
+import { markAssetUploaded } from '../../../shared/assets.js';
 
 const CORS_WRITE = {
   'Access-Control-Allow-Origin': '*',
@@ -166,6 +167,8 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Upload to storage failed' }, 500);
     }
 
+    // Tagged uploads (see /api/upload-url `metadata`) become listable once their bytes are in R2.
+    await markAssetUploaded(env, key);
     return json({ ok: true, key });
   }
 

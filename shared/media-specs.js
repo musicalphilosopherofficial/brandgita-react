@@ -59,6 +59,24 @@ const matchesAspect = (file, label) => Math.abs(file.width / file.height / ratio
 
 /** Names for messages, so a platform id is never shown to a creator raw. */
 export const PLATFORM_LABELS = Object.freeze({ ig: 'Instagram', tt: 'TikTok', yt: 'YouTube' });
+
+/** The names clients use for a platform, mapped to the ONE canonical id used everywhere server-side
+ *  (registry key, `platform` column, adapter key, log field). Unknown names map to themselves so the
+ *  caller's own "unknown platform" message can quote them. */
+export const PLATFORM_ALIASES = Object.freeze({ ig: 'ig', instagram: 'ig', tt: 'tt', tiktok: 'tt', yt: 'yt', youtube: 'yt' });
+export const canonicalPlatform = (name) => PLATFORM_ALIASES[String(name).toLowerCase()] ?? name;
+
+/** Every aspect any platform accepts — what a stored file may be tagged with. */
+export const KNOWN_ASPECTS = Object.freeze([...new Set(
+  Object.values(MEDIA_SPECS).flatMap((kinds) => Object.values(kinds).flatMap((spec) => spec.aspects)),
+)]);
+
+/** Does `platform` (any alias) take a file of this aspect label in at least one of its kinds? */
+export function platformAcceptsAspect(platform, aspect) {
+  const kinds = MEDIA_SPECS[canonicalPlatform(platform)];
+  return Boolean(kinds) && Object.values(kinds).some((spec) => spec.aspects.includes(aspect));
+}
+
 const nameOf = (t) => `${PLATFORM_LABELS[t.platform] || t.platform} ${t.kind}`;
 const keyOf = (t) => `${t.platform}:${t.kind}`;
 const finitePositive = (n) => typeof n === 'number' && Number.isFinite(n) && n > 0;

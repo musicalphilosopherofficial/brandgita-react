@@ -117,11 +117,13 @@ async function failPermanently(env, post, errorText) {
 
 // Remember that Instagram has published this post. Best-effort by design: the post is already
 // live, and a bookkeeping write must never turn that into a failure.
-async function saveMediaId(env, postId, mediaId) {
+// `column` is the adapter's own publishedIdColumn (a code constant, never user input): ig_media_id for
+// Instagram, tt_publish_id for TikTok. Defaults to Instagram's so every existing call is unchanged.
+async function saveMediaId(env, postId, mediaId, column = 'ig_media_id') {
   try {
-    await env.DB.prepare(`UPDATE scheduled_posts SET ig_media_id = ? WHERE id = ?`).bind(mediaId, postId).run();
+    await env.DB.prepare(`UPDATE scheduled_posts SET ${column} = ? WHERE id = ?`).bind(mediaId, postId).run();
   } catch (err) {
-    console.error(`Post ${postId}: could not save ig_media_id ${mediaId}:`, { message: err?.message });
+    console.error(`Post ${postId}: could not save ${column} ${mediaId}:`, { message: err?.message });
   }
 }
 
@@ -345,7 +347,7 @@ async function processPost(
       post,
       assetKeys,
       creds: credsResult.creds,
-      deps: { mediaBase, sleepFn, pollIntervalMs, pollMaxMs, onMediaPublished: (mediaId) => saveMediaId(env, post.id, mediaId) },
+      deps: { mediaBase, sleepFn, pollIntervalMs, pollMaxMs, onMediaPublished: (mediaId) => saveMediaId(env, post.id, mediaId, adapter.publishedIdColumn) },
     });
 
     await markPosted(env, post.id, permalink);
@@ -361,8 +363,18 @@ async function processPost(
       return;
     }
 
-    // Any other error is treated as transient -> retry up to the cap.
     const message = (err && err.message) ? err.message : String(err);
+
+    // An adapter marks an error `permanent` when retrying cannot help and the creator can act on it
+    // (e.g. a privacy level the account no longer offers). Fail at once with the readable message, like
+    // TOKEN_EXPIRED: it is shown to the creator, not ticketed as a fault.
+    if (err && err.permanent === true) {
+      await markFailed(env, post.id, message.slice(0, 1000));
+      console.error(`Post ${post.id} [platform=${platform}] failed permanently: ${message}`);
+      return;
+    }
+
+    // Any other error is treated as transient -> retry up to the cap.
     await handleRetryableFailure(env, post, message.slice(0, 1000));
   }
 }

@@ -26,6 +26,7 @@
  */
 
 import { mediaSlug, requireUserAuth } from '../_auth.js';
+import { validateMetadata, reserveAsset, markAssetUploaded } from '../../../shared/assets.js';
 import { ALLOWED_CONTENT_TYPES, KEY_SHAPE, MAX_BYTES } from '../media/[key].js';
 
 const CORS = {
@@ -99,6 +100,20 @@ export async function onRequest(context) {
       }
       if (size > MAX_BYTES) return json({ ok: false, error: 'File too large' }, 413);
 
+      // Optional tags, same shape and rules as /api/upload-url `metadata`. If the same source_path_hash +
+      // aspect is already stored, answer with its key and NO upload_id: nothing is uploaded.
+      if (body.metadata !== undefined) {
+        const meta = validateMetadata(body.metadata);
+        if (meta.problems.length) return json({ ok: false, error: meta.problems.join('; ') }, 400);
+        try {
+          const asset = await reserveAsset(env, auth.ig_user_id, key, meta.value);
+          if (asset.existing) return json({ ok: true, existing: true, key: asset.key, metadata: meta.value });
+        } catch (err) {
+          console.error('media-upload: could not record the asset', { message: err?.message });
+          return json({ ok: false, error: 'Could not record the upload' }, 500);
+        }
+      }
+
       try {
         const upload = await bucket.createMultipartUpload(key, { httpMetadata: { contentType } });
         return json({ ok: true, upload_id: upload.uploadId, part_size: PART_SIZE });
@@ -147,6 +162,7 @@ export async function onRequest(context) {
         }
         return json({ ok: false, error: `Upload is ${actual} bytes but ${size} were declared — discarded` }, 422);
       }
+      await markAssetUploaded(env, key);
       return json({ ok: true, key });
     }
 

@@ -24,6 +24,10 @@
 
 export const DEFAULT_PLATFORM = 'ig';
 
+// Clients say "tiktok"/"instagram"; the registry, the `platform` column, the adapter key and every log line
+// say 'tt'/'ig'. One canonical id through every layer (see the header) — the alias is mapped at the edge.
+export { canonicalPlatform } from './media-specs.js';
+
 export const CONTRACTS = Object.freeze({
   ig: Object.freeze({
     id: 'ig',
@@ -74,6 +78,30 @@ export const CONTRACTS = Object.freeze({
       if (type === 'carousel' && (n < 2 || n > 10)) {
         problems.push('a carousel needs between 2 and 10 assets');
       }
+      if (typeof caption === 'string' && caption.length > this.captionMax) {
+        problems.push(`caption must be ${this.captionMax} characters or fewer`);
+      }
+      return problems;
+    },
+  }),
+
+  // TikTok: one vertical video per post, published by cron-worker/platforms/tiktok.js through the Content
+  // Posting API. Photo posts are not scheduled (PULL_FROM_URL needs a verified domain). `captionMax` is
+  // TikTok's title cap; the per-post choices (privacy, cover, ...) are validated by shared/tiktok-options.js.
+  tt: Object.freeze({
+    id: 'tt',
+    label: 'TikTok',
+    contentTypes: Object.freeze(['reel']),
+    captionMax: 2200,
+    trial: null,
+    validateCreate({ type, asset_keys, caption }) {
+      const problems = [];
+      if (!this.contentTypes.includes(type)) {
+        problems.push(`type must be one of: ${this.contentTypes.join(', ')}`);
+        return problems;
+      }
+      const n = Array.isArray(asset_keys) ? asset_keys.length : 0;
+      if (n !== 1) problems.push('a TikTok video needs exactly 1 asset');
       if (typeof caption === 'string' && caption.length > this.captionMax) {
         problems.push(`caption must be ${this.captionMax} characters or fewer`);
       }

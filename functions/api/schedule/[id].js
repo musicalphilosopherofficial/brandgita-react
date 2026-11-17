@@ -1,6 +1,7 @@
 import { requireUserAuth } from '../_auth.js';
 import { contractFor, resolveTrialStrategy } from '../../../shared/platform-contracts.js';
 import { deleteUnreferencedMedia } from '../../../shared/media-refs.js';
+import { resolveTikTokOptions, TIKTOK_FIELDS } from '../../../shared/tiktok-options.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -123,7 +124,8 @@ export async function onRequest(context) {
 // caller's account prefix, the platform contract, and the object already in R2. The replaced objects are deleted from R2 only
 // AFTER the row update succeeds, so a failed update never strands a post without its media. id, type, platform and the owner
 // stay fixed. See PATCH_SCHEDULE_SPEC.md.
-const PATCHABLE = new Set(['post_at', 'caption', 'cover_key', 'asset_keys', 'trial_strategy']);
+// The TikTok fields (privacy_level, title, ...) are patchable on TikTok posts only.
+const PATCHABLE = new Set(['post_at', 'caption', 'cover_key', 'asset_keys', 'trial_strategy', ...TIKTOK_FIELDS]);
 
 async function handlePatch(context) {
   const { request, env, params } = context;
@@ -189,7 +191,7 @@ async function handlePatch(context) {
   let post;
   try {
     post = await env.DB.prepare(
-      `SELECT id, ig_user_id, status, caption, post_at, platform, type, asset_keys, cover_key, trial_strategy FROM scheduled_posts WHERE id = ?`
+      `SELECT id, ig_user_id, status, caption, post_at, platform, type, asset_keys, cover_key, trial_strategy, tiktok_options FROM scheduled_posts WHERE id = ?`
     )
       .bind(id)
       .first();
@@ -242,6 +244,19 @@ async function handlePatch(context) {
     }
   }
 
+  // TikTok's per-post choices merge over what is stored. Refused on other platforms (never silently dropped).
+  let tikTok = null;
+  const tikTokGiven = TIKTOK_FIELDS.filter((f) => body[f] !== undefined);
+  if (tikTokGiven.length) {
+    if (post.platform !== 'tt') {
+      return json({ ok: false, error: `${tikTokGiven.join(', ')} only apply to TikTok posts` }, 400);
+    }
+    let current = null;
+    try { current = post.tiktok_options ? JSON.parse(post.tiktok_options) : null; } catch { current = null; }
+    tikTok = resolveTikTokOptions(body, { current });
+    if (tikTok.problems.length) return json({ ok: false, error: tikTok.problems.join('; ') }, 400);
+  }
+
   // New keys: the caller's account only (the cron serves them as public URLs), and already uploaded.
   const newKeys = [...(asset_keys || []), ...(cover_key !== undefined ? [cover_key] : [])];
   const prefix = `${ig_user_id}/`;
@@ -270,6 +285,7 @@ async function handlePatch(context) {
   if (cover_key !== undefined) { sets.push('cover_key = ?'); binds.push(cover_key); }
   if (asset_keys !== undefined) { sets.push('asset_keys = ?'); binds.push(JSON.stringify(asset_keys)); }
   if (trial_strategy !== undefined) { sets.push('trial_strategy = ?'); binds.push(trial_strategy); }
+  if (tikTok) { sets.push('tiktok_options = ?'); binds.push(JSON.stringify(tikTok.options)); }
 
   try {
     await env.DB.prepare(`UPDATE scheduled_posts SET ${sets.join(', ')} WHERE id = ?`)
@@ -297,6 +313,11 @@ async function handlePatch(context) {
     asset_keys: effective.asset_keys,
     trial_strategy: trial_strategy !== undefined ? trial_strategy : post.trial_strategy ?? null,
   };
+  if (post.platform === 'tt') {
+    let stored = null;
+    try { stored = tikTok ? tikTok.options : (post.tiktok_options ? JSON.parse(post.tiktok_options) : null); } catch { stored = null; }
+    if (stored) Object.assign(out, stored);
+  }
   if (deleteErrors.length) out.warning = `Updated, but some replaced media could not be removed from storage: ${deleteErrors.join(', ')}`;
   return json(out);
 }

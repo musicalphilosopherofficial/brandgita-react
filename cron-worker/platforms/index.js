@@ -10,8 +10,9 @@
 // immediately. A plain object literal has no such failure mode: either the
 // import is here and the entry exists, or the file doesn't compile.
 import { instagram } from './instagram.js';
+import { tiktok } from './tiktok.js';
 
-export const ADAPTERS = Object.freeze({ ig: instagram });
+export const ADAPTERS = Object.freeze({ ig: instagram, tt: tiktok });
 
 // Throws naming what IS registered — never a bare undefined that surfaces
 // later as a confusing TypeError far from the real mistake (same philosophy

@@ -1,3 +1,5 @@
+import { markAssetsPurged } from './assets.js';
+
 /**
  * Reference-safe media deletion.
  *
@@ -45,6 +47,7 @@ export async function deleteUnreferencedMedia(env, keys, { excludePostId } = {})
     try {
       await env.SCHEDULE_BUCKET.delete(key);
       out.deleted.push(key);
+      await markAssetsPurged(env, [key]);
     } catch (err) {
       console.error(`media-refs: R2 delete failed for '${key}':`, { message: err?.message });
       out.failed.push(key);

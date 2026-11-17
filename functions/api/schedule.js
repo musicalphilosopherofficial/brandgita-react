@@ -1,5 +1,6 @@
 import { requireUserAuth } from './_auth.js';
-import { DEFAULT_PLATFORM, contractFor, resolveTrialStrategy } from '../../shared/platform-contracts.js';
+import { DEFAULT_PLATFORM, contractFor, resolveTrialStrategy, canonicalPlatform } from '../../shared/platform-contracts.js';
+import { resolveTikTokOptions, flattenTikTok, TIKTOK_FIELDS } from '../../shared/tiktok-options.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -36,13 +37,17 @@ export async function onRequest(context) {
     }
 
     // ig_user_id comes from the bearer token — not from the body (never trust caller-supplied user id)
-    const { id, type, asset_keys, cover_key, caption, post_at } = body;
+    const { id, asset_keys, cover_key, post_at } = body;
 
     // platform is OPTIONAL and defaults to 'ig'. Every desktop client shipped to date
     // omits it and must keep behaving identically — this endpoint is live with a paying
     // customer, and the desktop ships on its own release cadence, so requiring a field
     // older builds cannot send would break them the moment this deploys.
-    const platform = body.platform ?? DEFAULT_PLATFORM;
+    // 'tiktok' and 'tt' (likewise 'instagram'/'ig') are the same platform: stored and returned as the canonical id.
+    const platform = canonicalPlatform(body.platform ?? DEFAULT_PLATFORM);
+    // A TikTok post is always one video, so `type` may be left out; its caption may be too (the title is used).
+    const type = body.type ?? (platform === 'tt' ? 'reel' : undefined);
+    const caption = body.caption ?? (platform === 'tt' ? (typeof body.title === 'string' ? body.title : '') : undefined);
     let contract;
     try {
       contract = contractFor(platform);
@@ -52,7 +57,7 @@ export async function onRequest(context) {
       return json({ ok: false, error: err.message }, 400);
     }
 
-    if (!id || !type || !Array.isArray(asset_keys) || asset_keys.length === 0 || !caption || !post_at) {
+    if (!id || !type || !Array.isArray(asset_keys) || asset_keys.length === 0 || (!caption && platform !== 'tt') || !post_at) {
       return json(
         { ok: false, error: 'id, type, asset_keys (non-empty), caption and post_at are required' },
         400
@@ -71,6 +76,12 @@ export async function onRequest(context) {
     // (NULL); only an explicit, valid value makes the cron send trial_params.
     const trial = resolveTrialStrategy(contract, { type, requested: body.trial_strategy });
     problems.push(...trial.problems);
+    // TikTok's per-post choices. Refused on other platforms rather than dropped: a creator who sent a
+    // privacy_level must not believe it was applied to an Instagram post.
+    const tikTokGiven = TIKTOK_FIELDS.filter((f) => body[f] !== undefined);
+    const tikTok = platform === 'tt' ? resolveTikTokOptions(body) : null;
+    if (tikTok) problems.push(...tikTok.problems);
+    else if (tikTokGiven.length) problems.push(`${tikTokGiven.join(', ')} only apply to TikTok posts`);
     if (problems.length) {
       // Every problem at once — a creator fixing one field per request is a worse
       // experience than being told all of it up front.
@@ -102,25 +113,42 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'post_at cannot be more than 45 days in the future' }, 400);
     }
 
+    // Idempotency: the same account, platform, asset(s) and post_at is the same post. A client that retries
+    // (or re-sends with a fresh id) gets the existing post back, never a second row that would publish twice.
+    // A FAILED post does not count — re-scheduling after a failure is legitimate.
+    const assetKeysJson = JSON.stringify(asset_keys);
+    try {
+      const dupe = await env.DB.prepare(
+        `SELECT id, post_at FROM scheduled_posts
+          WHERE ig_user_id = ? AND platform = ? AND asset_keys = ? AND post_at = ? AND status != 'failed'
+          LIMIT 1`
+      ).bind(ig_user_id, platform, assetKeysJson, post_at).first();
+      if (dupe?.id) return json({ ok: true, id: dupe.id, post_at: dupe.post_at, duplicate: true });
+    } catch (err) {
+      console.error('D1 select error (scheduled_posts duplicate check):', { message: err?.message });
+      return json({ ok: false, error: 'Could not check for an existing post' }, 500);
+    }
+
     const now = new Date().toISOString();
 
     try {
       await env.DB.prepare(
         `INSERT INTO scheduled_posts
-           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at, trial_strategy)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?, ?)`
+           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at, trial_strategy, tiktok_options)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?, ?, ?)`
       )
         .bind(
           id,
           ig_user_id,
           platform,
           type,
-          JSON.stringify(asset_keys),
+          assetKeysJson,
           cover_key ?? null,
           caption,
           post_at,
           now,
-          trial.strategy
+          trial.strategy,
+          tikTok ? JSON.stringify(tikTok.options) : null
         )
         .run();
     } catch (err) {
@@ -132,24 +160,31 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Could not save scheduled post' }, 500);
     }
 
-    return json({ ok: true, id });
+    return json({ ok: true, id, post_at });
   }
 
   // ── GET — list scheduled posts for the authenticated user ────────────────
   if (request.method === 'GET') {
     // ig_user_id is scoped from the bearer token — no query param needed/accepted
 
+    // Optional filters: ?platform=tiktok (any alias) and ?status=scheduled. No filter = every post, as before.
+    const q = request.url ? new URL(request.url).searchParams : new URLSearchParams();
+    const where = ['ig_user_id = ?'];
+    const binds = [ig_user_id];
+    if (q.get('platform')) { where.push('platform = ?'); binds.push(canonicalPlatform(q.get('platform'))); }
+    if (q.get('status')) { where.push('status = ?'); binds.push(q.get('status')); }
+
     let rows;
     try {
       const result = await env.DB.prepare(
-        `SELECT id, platform, type, post_at, status, permalink, error, retry_count, caption, trial_strategy
+        `SELECT id, platform, type, post_at, status, permalink, error, retry_count, caption, trial_strategy, tiktok_options
          FROM scheduled_posts
-         WHERE ig_user_id = ?
+         WHERE ${where.join(' AND ')}
          ORDER BY post_at ASC`
       )
-        .bind(ig_user_id)
+        .bind(...binds)
         .all();
-      rows = result.results;
+      rows = result.results.map(flattenTikTok);
     } catch (err) {
       console.error('D1 select error (scheduled_posts):', err);
       return json({ ok: false, error: 'Could not fetch scheduled posts' }, 500);

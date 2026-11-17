@@ -1,5 +1,6 @@
 import { requireUserAuth } from './_auth.js';
 import { assignFiles } from '../../shared/media-specs.js';
+import { validateMetadata, reserveAsset } from '../../shared/assets.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -67,12 +68,37 @@ export async function onRequest(context) {
     }
   }
 
+  // Optional: tag the upload (piece, targets, aspect, tags, source_path_hash) so a later schedule reads the
+  // tags instead of the app re-sending the file. One clip per call — metadata describes ONE stored file.
+  // The same source_path_hash + aspect again returns the existing key (`existing: true`): do not upload.
+  let asset;
+  if (body.metadata !== undefined) {
+    if (keys.length !== 1) {
+      return json({ ok: false, error: 'metadata describes one stored file: send one key per call' }, 400);
+    }
+    const meta = validateMetadata(body.metadata);
+    if (meta.problems.length) {
+      return json({ ok: false, error: meta.problems.join('; ') }, 400);
+    }
+    try {
+      asset = await reserveAsset(env, ig_user_id, keys[0], meta.value);
+    } catch (err) {
+      console.error('upload-url: could not record the asset:', { message: err?.message });
+      return json({ ok: false, error: 'Could not record the upload' }, 500);
+    }
+  }
+
   const origin = new URL(request.url).origin;
 
-  const uploads = keys.map((key) => ({
-    key,
-    upload_url: `${origin}/api/media/${encodeURIComponent(key)}`,
-  }));
+  const uploads = keys.map((key) => {
+    const useKey = asset ? asset.key : key;
+    const entry = { key: useKey, upload_url: `${origin}/api/media/${encodeURIComponent(useKey)}` };
+    if (asset?.existing) entry.existing = true;
+    return entry;
+  });
 
-  return json(plan ? { ok: true, uploads, plan } : { ok: true, uploads });
+  const out = { ok: true, uploads };
+  if (plan) out.plan = plan;
+  if (asset) out.asset = { key: asset.key, existing: asset.existing, metadata: validateMetadata(body.metadata).value };
+  return json(out);
 }
