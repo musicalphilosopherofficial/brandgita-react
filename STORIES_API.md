@@ -8,13 +8,20 @@ Meta parameters verified against Meta's Content Publishing docs on 2026-11-25: `
 `video_url`, poll `status_code` until `FINISHED`, then `POST /{ig-user-id}/media_publish`. The adapter sends no `caption`
 and no `cover_url` for a story (Meta lists neither for stories).
 
+## Upload keys
+
+Keys are `{media-slug}/{folder}/{name}.{ext}` and the upload routes (`/api/upload-url`, `/api/media/:key`, `/api/media-upload/:key`) accept
+the folders `reel`, `cover`, `carousel` and **`story`** (added 2026-11-25 after a story upload was rejected with "Invalid key": the
+doc's first version used `story/` before the routes allowed it). Story keys end `.jpg`/`.jpeg` or `.mp4`. Keys already scheduled under
+`carousel/` keep working — the scheduler only reads the extension, never the folder.
+
 ## Create — `POST /api/schedule`
 
 ```json
 {
   "id": "story-1",
   "type": "story",
-  "asset_keys": ["<ig_user_id>/story/pic.jpg"],
+  "asset_keys": ["<media-slug>/story/<uuid>.jpg"],
   "post_at": "2026-12-01T09:00:00.000Z",
   "project_slug": "..."
 }

@@ -21,7 +21,8 @@ export const ALLOWED_CONTENT_TYPES = new Set([
   'image/png',
 ]);
 
-// Keys look like {prefix}/{reel|cover|carousel}/{name}.{ext}.
+// Keys look like {prefix}/{reel|cover|carousel|story}/{name}.{ext}. The folder names a CONTENT TYPE (shared/platform-contracts.js);
+// a platform that adds a content type adds its folder to KEY_FOLDERS, or its uploads are refused as an invalid key.
 //
 // The prefix is an opaque 20-hex media slug (see mediaSlug in ../_auth.js). It used to
 // be the raw ig_user_id, which meant every PUBLIC media URL — and these are public by
@@ -35,8 +36,10 @@ export const ALLOWED_CONTENT_TYPES = new Set([
 // The readable form is `<song>-by-<artist>-<20 hex>`; the words are decoration and the
 // 20 hex chars carry all 80 bits. `{1,60}` is bounded on purpose — an unbounded
 // character class in front of a fixed-width group is a backtracking trap.
-export const KEY_SHAPE =
-  /^([0-9]+|[a-z-]{1,60}-[0-9a-f]{20}|[0-9a-f]{20})\/(reel|cover|carousel)\/[A-Za-z0-9._-]+\.(mp4|mov|jpg|jpeg|png)$/;
+export const KEY_FOLDERS = Object.freeze(['reel', 'cover', 'carousel', 'story']);
+export const KEY_SHAPE = new RegExp(
+  `^([0-9]+|[a-z-]{1,60}-[0-9a-f]{20}|[0-9a-f]{20})\\/(${KEY_FOLDERS.join('|')})\\/[A-Za-z0-9._-]+\\.(mp4|mov|jpg|jpeg|png)$`,
+);
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
