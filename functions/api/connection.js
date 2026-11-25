@@ -1,9 +1,10 @@
 import { mediaSlug, requireUserAuth } from './_auth.js';
 import { validateDevice } from './_whop.js';
 import { decryptToken } from './_crypto.js';
+import { IG_GRAPH_BASE } from '../../shared/instagram-graph.js';
 
 // Instagram Graph host — matches token.js's /me call version.
-const GRAPH_BASE = 'https://graph.instagram.com/v22.0';
+const GRAPH_BASE = IG_GRAPH_BASE;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',

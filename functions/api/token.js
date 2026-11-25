@@ -2,6 +2,7 @@ import { mediaSlug, requireUserAuth, sha256Hex } from './_auth.js';
 import { checkWhopLicense, validateDevice } from './_whop.js';
 import { encryptToken } from './_crypto.js';
 import { requireRateLimit, clientKey } from './_ratelimit.js';
+import { IG_GRAPH_BASE } from '../../shared/instagram-graph.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -231,7 +232,7 @@ export async function onRequest(context) {
   let username = null;
   let profile_picture_url = null;
   try {
-    const meUrl = new URL('https://graph.instagram.com/v22.0/me');
+    const meUrl = new URL(`${IG_GRAPH_BASE}/me`);
     meUrl.searchParams.set('fields', 'username,profile_picture_url');
     meUrl.searchParams.set('access_token', access_token);
     const meRes = await fetch(meUrl.toString());

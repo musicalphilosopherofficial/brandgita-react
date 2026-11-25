@@ -1,5 +1,6 @@
 // Tests for POST /api/token — run with:  node --test functions/api/token.test.js
 // No deps: uses Node's built-in test runner. Mocks global fetch + a fake D1.
+import { IG_GRAPH_VERSION } from '../../shared/instagram-graph.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequest } from './token.js';
@@ -72,7 +73,7 @@ test('code path: exchanges code → short-lived → long-lived, returns ig_user_
     if (String(url).includes('api.instagram.com/oauth/access_token')) {
       return { ok: true, json: async () => ({ access_token: 'short-tok', user_id: 178414 }) };
     }
-    if (String(url).includes('graph.instagram.com/v22.0/me')) {
+    if (String(url).includes(`graph.instagram.com/${IG_GRAPH_VERSION}/me`)) {
       // the /me call must now request BOTH username and profile_picture_url (the avatar fix)
       assert.ok(String(url).includes('profile_picture_url'), '/me must fetch profile_picture_url');
       return { ok: true, json: async () => ({ username: 'creator.handle', profile_picture_url: 'https://cdn.example/pic.jpg' }) };
@@ -107,7 +108,7 @@ test('legacy path: {ig_user_id, short_lived_token} skips code exchange', async (
     seen.push(String(url));
     const whop = whopActiveMock(url, opts);
     if (whop) return whop;
-    if (String(url).includes('graph.instagram.com/v22.0/me')) {
+    if (String(url).includes(`graph.instagram.com/${IG_GRAPH_VERSION}/me`)) {
       return { ok: true, json: async () => ({ username: 'legacy.handle' }) };
     }
     return { ok: true, json: async () => ({ access_token: 'long-tok', expires_in: 5184000 }) };
@@ -196,7 +197,7 @@ test('the stored row links back to the Whop license + membership', async () => {
   mockFetch([
     ['api.instagram.com/oauth/access_token', { body: { access_token: 'short-tok', user_id: 1 } }],
     ['graph.instagram.com/access_token', { body: { access_token: 'long-tok', expires_in: 5184000 } }],
-    ['graph.instagram.com/v22.0/me', { body: {} }],
+    [`graph.instagram.com/${IG_GRAPH_VERSION}/me`, { body: {} }],
   ]);
   const db = fakeDB();
   await onRequest(makeContext({ code: 'OAUTH_CODE', license_key: 'lic_specific' }, { db }));

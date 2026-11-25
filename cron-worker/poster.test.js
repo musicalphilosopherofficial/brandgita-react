@@ -18,7 +18,7 @@ import posterDefault, {
   processPost, refreshExpiringTokens, claimPost, runDue,
 } from './poster.js';
 
-const GRAPH_BASE = 'https://graph.instagram.com/v21.0';
+import { IG_GRAPH_BASE as GRAPH_BASE } from '../shared/instagram-graph.js';
 const MEDIA_BASE = 'https://test-media.example/media';
 // Valid base64 of 32 random bytes — same fixture key used in functions/api/token.test.js.
 const TOKEN_ENC_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=';

@@ -38,8 +38,9 @@
 
 import { encryptToken, decryptToken } from '../_crypto.js';
 import { mediaUrl, nowIso, countRows } from '../util.js';
+import { IG_GRAPH_BASE } from '../../shared/instagram-graph.js';
 
-const GRAPH_BASE = 'https://graph.instagram.com/v21.0';
+const GRAPH_BASE = IG_GRAPH_BASE;
 
 // Custom error that carries the Meta error code so the caller can detect 190.
 class IgApiError extends Error {
