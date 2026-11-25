@@ -163,3 +163,55 @@ test('"vertical" means 9:16 exactly (±2% for encoder rounding), not anything ta
     for (const f of no) assert.equal(assignFiles({ files: [f], targets: [target] }).problems.length, 1, `${f.id} for ${target.platform}`);
   }
 });
+
+// ── Story media: advisory aspect (warn, never reject), hard duration / size limits ───────────────────
+import { judgeFile } from './media-specs.js';
+
+const img = (over = {}) => ({ kind: 'image', width: 1080, height: 1920, bytes: 2e6, ...over });
+const vid = (over = {}) => ({ kind: 'video', width: 1080, height: 1920, durationSec: 30, bytes: 20e6, ...over });
+
+test('IG story spec: 9:16 is preferred but ADVISORY; video 3-60s; image 8MB, video 100MB', () => {
+  const s = MEDIA_SPECS.ig.story;
+  assert.deepEqual(s.aspects, ['9:16']);
+  assert.equal(s.aspectAdvisory, true);
+  assert.equal(s.maxDurationSec, 60);
+  assert.equal(s.minDurationSec, 3);
+  assert.deepEqual(s.maxBytesByKind, { image: 8 * 1024 ** 2, video: 100 * 1024 ** 2 });
+});
+
+test('judgeFile: a 1080x1920 story image and a 30s vertical video are clean', () => {
+  assert.deepEqual(judgeFile('ig', 'story', img()), { problems: [], warnings: [] });
+  assert.deepEqual(judgeFile('ig', 'story', vid()), { problems: [], warnings: [] });
+});
+
+test('judgeFile: a non-9:16 story is accepted with a letterbox WARNING, not a problem', () => {
+  const r = judgeFile('ig', 'story', img({ width: 1080, height: 1080 }));
+  assert.deepEqual(r.problems, []);
+  assert.equal(r.warnings.length, 1);
+  assert.match(r.warnings[0], /letterbox/i);
+  assert.match(r.warnings[0], /9:16/);
+});
+
+test('judgeFile: video over 60s or under 3s is a problem', () => {
+  assert.match(judgeFile('ig', 'story', vid({ durationSec: 61 })).problems[0], /60s/);
+  assert.match(judgeFile('ig', 'story', vid({ durationSec: 2 })).problems[0], /3s/);
+  assert.deepEqual(judgeFile('ig', 'story', vid({ durationSec: 60 })).problems, []);
+});
+
+test('judgeFile: duration limits never apply to an image; size limits are per kind', () => {
+  assert.deepEqual(judgeFile('ig', 'story', img({ durationSec: 999 })).problems, []);
+  assert.match(judgeFile('ig', 'story', img({ bytes: 9 * 1024 ** 2 })).problems[0], /8 ?MB|limit/);
+  assert.deepEqual(judgeFile('ig', 'story', vid({ bytes: 9 * 1024 ** 2 })).problems, []);
+  assert.match(judgeFile('ig', 'story', vid({ bytes: 101 * 1024 ** 2 })).problems[0], /limit/);
+});
+
+test('judgeFile: a platform/kind with no spec judges nothing (generic, platform-agnostic)', () => {
+  assert.deepEqual(judgeFile('fb', 'story', img()), { problems: [], warnings: [] });
+  assert.deepEqual(judgeFile('ig', 'nope', img()), { problems: [], warnings: [] });
+});
+
+test('assignFiles: an advisory-aspect target (IG story) accepts any ratio rather than reporting "none fits"', () => {
+  const plan = assignFiles({ files: [square], targets: [T('ig', 'story')] });
+  assert.deepEqual(plan.problems, []);
+  assert.deepEqual(stored(plan), ['s']);
+});

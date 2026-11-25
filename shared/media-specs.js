@@ -39,6 +39,14 @@ export const MEDIA_SPECS = Object.freeze({
     // Carousels take 1:1 and 4:5 for now. This entry judges ONE file; a carousel is 2–10 slides and
     // the caller checks each slide.
     carousel: Object.freeze({ aspects: Object.freeze(['1:1', '4:5']) }),
+    // Story (Meta Content Publishing docs, read 2026-11-25): 9:16 is only RECOMMENDED ("to avoid cropping or blank space"),
+    // so the aspect is ADVISORY — another ratio is accepted with a letterbox warning, never refused. Hard limits are Meta's
+    // own: video 3–60 s, 100 MB; image JPEG, 8 MB.
+    story: Object.freeze({
+      aspects: Object.freeze(['9:16']), aspectAdvisory: true,
+      minDurationSec: 3, maxDurationSec: 60,
+      maxBytesByKind: Object.freeze({ image: 8 * 1024 ** 2, video: 100 * 1024 ** 2 }),
+    }),
   }),
   tt: Object.freeze({
     video: Object.freeze({
@@ -77,6 +85,33 @@ export function platformAcceptsAspect(platform, aspect) {
   return Boolean(kinds) && Object.values(kinds).some((spec) => spec.aspects.includes(aspect));
 }
 
+/**
+ * Judge ONE file against a platform's content-type spec: {problems, warnings}. Generic — whichever platform/kind declares a spec
+ * gets the same rules (an advisory aspect warns, a duration or size limit refuses). A platform or kind with no spec judges nothing.
+ * file: {kind?: 'image'|'video', width?, height?, durationSec?, bytes?} — every fact optional; only what is supplied is judged.
+ */
+export function judgeFile(platform, kind, file = {}) {
+  const spec = MEDIA_SPECS[canonicalPlatform(platform)]?.[kind];
+  const out = { problems: [], warnings: [] };
+  if (!spec) return out;
+  const label = `${PLATFORM_LABELS[canonicalPlatform(platform)] || platform} ${kind}`;
+  if (finitePositive(file.width) && finitePositive(file.height) && !spec.aspects.some((a) => matchesAspect(file, a))) {
+    const got = `${file.width}x${file.height}`;
+    const msg = `${label}: ${got} is not ${spec.aspects.join(' or ')}`;
+    if (spec.aspectAdvisory) out.warnings.push(`${msg}; Instagram will letterbox or crop it. ${spec.aspects[0]} (1080x1920) avoids that`);
+    else out.problems.push(`${msg} (${spec.aspects.join(' or ')} is needed)`);
+  }
+  if (file.kind !== 'image' && finitePositive(file.durationSec)) {
+    if (spec.maxDurationSec && file.durationSec > spec.maxDurationSec) out.problems.push(`${label}: ${Math.round(file.durationSec)}s is over the ${spec.maxDurationSec}s limit`);
+    if (spec.minDurationSec && file.durationSec < spec.minDurationSec) out.problems.push(`${label}: ${round2(file.durationSec)}s is under the ${spec.minDurationSec}s minimum`);
+  }
+  const maxBytes = spec.maxBytesByKind?.[file.kind] ?? spec.maxBytes;
+  if (maxBytes && finitePositive(file.bytes) && file.bytes > maxBytes) {
+    out.problems.push(`${label}: file is larger than the ${Math.round(maxBytes / 1024 ** 2)} MB limit`);
+  }
+  return out;
+}
+
 const nameOf = (t) => `${PLATFORM_LABELS[t.platform] || t.platform} ${t.kind}`;
 const keyOf = (t) => `${t.platform}:${t.kind}`;
 const finitePositive = (n) => typeof n === 'number' && Number.isFinite(n) && n > 0;
@@ -88,7 +123,7 @@ function supportedList() {
 
 /** Why `file` cannot serve a platform with `spec`, or null when it can. */
 function whyNot(file, spec) {
-  if (!spec.aspects.some((a) => matchesAspect(file, a))) {
+  if (!spec.aspectAdvisory && !spec.aspects.some((a) => matchesAspect(file, a))) {
     return `${file.id} is ${file.width}x${file.height} (${round2(file.width / file.height)}:1) but ${spec.aspects.join(' or ')} is needed`;
   }
   if (spec.maxDurationSec && finitePositive(file.durationSec) && file.durationSec > spec.maxDurationSec) {

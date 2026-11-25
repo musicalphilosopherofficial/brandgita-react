@@ -510,7 +510,7 @@ test('carousel with 1 asset throws before any Graph call — retried as a transi
 
 test('unknown post type -> markFailed, retry_count NOT incremented', async () => {
   const { env, state } = makeEnv({
-    posts: { 'post-1': post({ type: 'story', retry_count: 2 }) },
+    posts: { 'post-1': post({ type: 'podcast', retry_count: 2 }) },
     tokens: { 'ig-user-1': tokenRow() },
   });
   const calls = makeFetchMock([]);
@@ -520,7 +520,7 @@ test('unknown post type -> markFailed, retry_count NOT incremented', async () =>
   assert.equal(calls.length, 0);
   assert.equal(state.posts['post-1'].status, 'failed');
   assert.equal(state.posts['post-1'].retry_count, 2, 'markFailed never touches retry_count');
-  assert.match(state.posts['post-1'].error, /Unknown post type: story/);
+  assert.match(state.posts['post-1'].error, /Unknown post type: podcast/);
 });
 
 // ---------------------------------------------------------------------------
@@ -725,7 +725,7 @@ test('runDue: only the LIMIT 10 due posts are processed, not more', async () => 
   const igUserId = 'ig-user-1';
   const posts = {};
   for (let i = 1; i <= 12; i++) {
-    posts[`post-${i}`] = post({ id: `post-${i}`, type: 'story' }); // "story" resolves instantly via markFailed, no Graph calls
+    posts[`post-${i}`] = post({ id: `post-${i}`, type: 'podcast' }); // an unknown type resolves instantly via markFailed, no Graph calls ('story' is a real type now)
   }
   const { env, state } = makeEnv({ posts, tokens: { [igUserId]: tokenRow() } });
   makeFetchMock([]);
@@ -827,4 +827,120 @@ test('refresh sweep updates a row with its new expiry; one user failing does not
   assert.equal(state.tokens['user-good'].access_token.startsWith('v1:'), true, 'refreshed token stored encrypted');
   assert.notEqual(state.tokens['user-good'].access_token, 'old-plaintext-good');
   assert.equal(state.tokens['user-bad'].access_token, 'old-plaintext-bad', 'a failed refresh leaves the row untouched');
+});
+
+
+// ---------------------------------------------------------------------------
+// Story: container (media_type=STORIES) -> poll -> media_publish, on the SAME poster/adapter path as reels
+// ---------------------------------------------------------------------------
+
+function storyFetchMocks({ poll = ['FINISHED'], onCreate } = {}) {
+  const order = [];
+  let polls = 0;
+  const calls = makeFetchMock([
+    [isCreate, (u, opts, body) => { order.push('create'); if (onCreate) onCreate(u, body); return jsonOk({ id: 'story-container-1' }); }],
+    [isPollStatus, () => { order.push('poll'); const code = poll[Math.min(polls++, poll.length - 1)]; return jsonOk({ status_code: code }); }],
+    [isPublish, (u, opts, body) => { order.push('publish'); assert.equal(body.get('creation_id'), 'story-container-1'); return jsonOk({ id: 'story-media-1' }); }],
+    [isPermalink, () => jsonOk({ permalink: 'https://www.instagram.com/stories/acct/123/' })],
+  ]);
+  return { calls, order };
+}
+
+test('story image: STORIES container with image_url (no caption, no video_url, no cover) -> poll -> publish -> posted', async () => {
+  const igUserId = 'acct-story-distinctive';
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ ig_user_id: igUserId, type: 'story', caption: '', asset_keys: JSON.stringify(['pic.jpg']) }) },
+    tokens: { [igUserId]: tokenRow({ ig_user_id: igUserId, access_token: 'story-token' }) },
+  });
+  const { calls, order } = storyFetchMocks({
+    poll: ['IN_PROGRESS', 'FINISHED'],
+    onCreate: (u, body) => {
+      assert.equal(u, mediaCreateUrl(igUserId));
+      assert.equal(body.get('media_type'), 'STORIES');
+      assert.equal(body.get('image_url'), `${MEDIA_BASE}/pic.jpg`);
+      assert.equal(body.get('video_url'), null);
+      assert.equal(body.get('caption'), null, 'stories ignore captions: none is sent');
+      assert.equal(body.get('cover_url'), null);
+      assert.equal(body.get('access_token'), 'story-token');
+    },
+  });
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.deepEqual(order, ['create', 'poll', 'poll', 'publish'], 'container, then status polling until FINISHED, then publish');
+  assert.equal(calls.filter((c) => isPublish(c.url, c)).length, 1);
+  assert.equal(state.posts['post-1'].status, 'posted');
+  assert.equal(state.posts['post-1'].permalink, 'https://www.instagram.com/stories/acct/123/');
+});
+
+test('story video: video_url, not image_url, and still no caption', async () => {
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify(['clip.mp4']) }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  storyFetchMocks({
+    onCreate: (u, body) => {
+      assert.equal(body.get('media_type'), 'STORIES');
+      assert.equal(body.get('video_url'), `${MEDIA_BASE}/clip.mp4`);
+      assert.equal(body.get('image_url'), null);
+      assert.equal(body.get('caption'), null);
+    },
+  });
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.equal(state.posts['post-1'].status, 'posted');
+});
+
+test('story never publishes before the container is FINISHED', async () => {
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify(['pic.jpg']) }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  const { order } = storyFetchMocks({ poll: ['IN_PROGRESS', 'IN_PROGRESS', 'FINISHED'] });
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.ok(order.indexOf('publish') > order.lastIndexOf('poll'));
+  assert.equal(order.filter((o) => o === 'poll').length, 3);
+});
+
+test('story container ERROR surfaces on the row (error text) and is retried, never published', async () => {
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify(['pic.jpg']), retry_count: 0 }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  const { order } = storyFetchMocks({ poll: ['ERROR'] });
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.ok(!order.includes('publish'));
+  assert.equal(state.posts['post-1'].status, 'scheduled');
+  assert.equal(state.posts['post-1'].retry_count, 1);
+  assert.match(state.posts['post-1'].error, /returned status ERROR/);
+});
+
+test('story container ERROR on the final attempt ends as failed with the error the client reads', async () => {
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify(['pic.jpg']), retry_count: 4 }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  storyFetchMocks({ poll: ['ERROR'] });
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.equal(state.posts['post-1'].status, 'failed');
+  assert.match(state.posts['post-1'].error, /ERROR/);
+});
+
+test('story with a stored ig_media_id (died after publish) only fetches the permalink — no second publish', async () => {
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify(['pic.jpg']), ig_media_id: 'story-media-1' }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  const { order } = storyFetchMocks();
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.deepEqual(order, []);
+  assert.equal(state.posts['post-1'].status, 'posted');
+});
+
+test('story with zero assets throws before any Graph call (retried as transient, like a reel)', async () => {
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify([]) }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  const calls = makeFetchMock([]);
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.equal(calls.length, 0);
+  assert.match(state.posts['post-1'].error, /Story has no asset keys/);
 });

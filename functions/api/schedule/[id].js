@@ -221,6 +221,7 @@ async function handlePatch(context) {
   const effective = {
     caption: caption !== undefined ? caption : post.caption,
     asset_keys: asset_keys !== undefined ? asset_keys : oldAssets,
+    cover_key: cover_key !== undefined ? cover_key : post.cover_key,
   };
 
   // The platform contract judges the post as it WILL be (type fixed; new assets, new caption), exactly as POST would.
@@ -231,10 +232,15 @@ async function handlePatch(context) {
     return json({ ok: false, error: err.message }, 400);
   }
   if (caption !== undefined || asset_keys !== undefined) {
-    const problems = contract.validateCreate({ type: post.type, asset_keys: effective.asset_keys, caption: effective.caption });
+    const problems = contract.validateCreate({ type: post.type, asset_keys: effective.asset_keys, caption: effective.caption, cover_key: effective.cover_key });
     if (problems.length) {
       return json({ ok: false, error: problems.join('; ') }, 400);
     }
+  }
+
+  // A content type that declares no cover (a story) cannot gain one. Other types are untouched by this check.
+  if (cover_key !== undefined && cover_key !== null && contract.shapes[post.type]?.cover === false) {
+    return json({ ok: false, error: `a ${post.type} cannot have a cover_key` }, 400);
   }
 
   if (trial_strategy !== undefined) {

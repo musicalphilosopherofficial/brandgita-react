@@ -204,6 +204,34 @@ async function postReel(post, assetKeys, accessToken, deps) {
   return publishAndGetPermalink(igUserId, creationId, accessToken, deps);
 }
 
+// STORY: create container (media_type=STORIES, image_url OR video_url by key extension) -> poll -> publish -> permalink.
+// Meta's story containers take no caption and no cover; stories expire after 24h. An image container is ready immediately and a
+// video is transcoded asynchronously, but both go through the same FINISHED poll as a reel — one code path, no special case.
+async function postStory(post, assetKeys, accessToken, deps) {
+  const igUserId = post.ig_user_id;
+
+  if (!assetKeys.length) {
+    throw new IgApiError('Story has no asset keys');
+  }
+
+  const key = assetKeys[0];
+  const url = mediaUrl(key, deps.mediaBase);
+  const params = { media_type: 'STORIES', ...(/\.mp4$/i.test(key) ? { video_url: url } : { image_url: url }) };
+
+  const createRes = await igPost(`${igUserId}/media`, params, accessToken);
+  const creationId = createRes.id;
+  if (!creationId) {
+    throw new IgApiError('Story container creation returned no id');
+  }
+
+  await waitForContainerReady(igUserId, creationId, accessToken, deps);
+
+  return publishAndGetPermalink(igUserId, creationId, accessToken, deps);
+}
+
+// content type -> publisher. A new type (or a platform reusing one) is a new entry here, not another branch in publish().
+const PUBLISHERS = Object.freeze({ reel: postReel, carousel: postCarousel, story: postStory });
+
 // CAROUSEL: create one child container per item (image OR video — the kind rides in the R2 key
 // extension the desktop uploader wrote: .jpg image child, .mp4 video child) in swipe order -> create
 // the carousel container -> publish -> permalink. Video children (animated education asset / b-roll
@@ -317,18 +345,14 @@ export const instagram = Object.freeze({
     if (post.ig_media_id) {
       return { permalink: await fetchPermalink(post.ig_media_id, accessToken, deps) };
     }
-    let permalink;
-    if (post.type === 'reel') {
-      permalink = await postReel(post, assetKeys, accessToken, deps);
-    } else if (post.type === 'carousel') {
-      permalink = await postCarousel(post, assetKeys, accessToken, deps);
-    } else {
+    const publisher = PUBLISHERS[post.type];
+    if (!publisher) {
       // Defensive only — the dispatcher already checks post.type against this
       // platform's contract (shared/platform-contracts.js) before ever
       // calling publish(), so this branch should be unreachable in production.
       throw new IgApiError(`Unknown post type: ${post.type}`);
     }
-    return { permalink };
+    return { permalink: await publisher(post, assetKeys, accessToken, deps) };
   },
 
   // Detects whether an error means "the access token is dead" — NOT the

@@ -28,11 +28,79 @@ export const DEFAULT_PLATFORM = 'ig';
 // say 'tt'/'ig'. One canonical id through every layer (see the header) — the alias is mapped at the edge.
 export { canonicalPlatform } from './media-specs.js';
 
+/** 'image' | 'video' | null from the R2 key's extension. The desktop uploader writes .jpg for an image and .mp4 for a
+ *  video (the carousel path already branches on this); Meta's story images are JPEG only. */
+export function assetKindOf(key) {
+  const m = /\.([a-z0-9]+)$/i.exec(String(key));
+  const ext = m ? m[1].toLowerCase() : '';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image';
+  if (ext === 'mp4') return 'video';
+  return null;
+}
+
+/**
+ * ONE generic validator for every platform's content types. A platform declares a `shapes` table — per content type:
+ *   min/max     how many assets          msg        the message when the count is wrong
+ *   caption     'required' (default) | 'optional' | 'none'   — 'none' REJECTS a non-empty caption (never silently dropped)
+ *   cover       false = a cover_key is rejected
+ *   assetKinds  allowed kinds from assetKindOf (['image','video']); omitted = not checked
+ *   checkMedia  true = the optional width/height/duration facts are judged against MEDIA_SPECS (judgeFile)
+ * Adding Facebook Stories (or any platform's story) is a new `shapes` entry, not new validation code.
+ */
+function validateShape(contract, { type, asset_keys, caption, cover_key } = {}) {
+  const problems = [];
+  const shape = contract.shapes[type];
+  if (!shape) {
+    problems.push(`type must be one of: ${contract.contentTypes.join(', ')}`);
+    // Everything below is type-specific; stop rather than emit cascading nonsense about a type that does not exist.
+    return problems;
+  }
+  const n = Array.isArray(asset_keys) ? asset_keys.length : 0;
+  if (n < shape.min || n > shape.max) problems.push(shape.msg);
+  if (shape.assetKinds && Array.isArray(asset_keys)) {
+    for (const k of asset_keys) {
+      const kind = assetKindOf(k);
+      if (!kind || !shape.assetKinds.includes(kind)) {
+        problems.push(`a ${type} asset must be a .jpg image or an .mp4 video (JPEG only for images); got ${JSON.stringify(k)}`);
+      }
+    }
+  }
+  const label = contract.label || contract.id;
+  if (shape.caption === 'none' && typeof caption === 'string' && caption.length > 0) {
+    problems.push(`a ${type} cannot have a caption (${label} ignores it): send an empty caption`);
+  }
+  if (shape.cover === false && cover_key) {
+    problems.push(`a ${type} cannot have a cover_key`);
+  }
+  if (typeof caption === 'string' && caption.length > contract.captionMax) {
+    problems.push(`caption must be ${contract.captionMax} characters or fewer`);
+  }
+  return problems;
+}
+
+/** Is a caption mandatory for this content type on this contract? (Unknown type: true, so the type error is what the creator sees.) */
+function captionRequired(contract, type) {
+  const c = contract.shapes[type]?.caption;
+  return c === undefined || c === 'required';
+}
+
+// contentTypes is DERIVED from `shapes`, so the list of valid types and the rules for them cannot drift apart.
+const platform = (c) => Object.freeze({ ...c, contentTypes: Object.freeze(Object.keys(c.shapes)) });
+
 export const CONTRACTS = Object.freeze({
-  ig: Object.freeze({
+  ig: platform({
     id: 'ig',
     label: 'Instagram',
-    contentTypes: Object.freeze(['reel', 'carousel']),
+    shapes: Object.freeze({
+      reel: Object.freeze({ min: 1, max: 1, msg: 'a reel needs exactly 1 asset' }),
+      carousel: Object.freeze({ min: 2, max: 10, msg: 'a carousel needs between 2 and 10 assets' }),
+      // Story (Meta Content Publishing, media_type=STORIES): ONE JPEG image or MP4 video, no caption (Instagram ignores it),
+      // no cover, expires after 24h. Aspect/duration/size are judged by media-specs.js (9:16 is advisory: letterboxed, not refused).
+      story: Object.freeze({
+        min: 1, max: 1, msg: 'a story needs exactly 1 asset',
+        caption: 'none', cover: false, assetKinds: Object.freeze(['image', 'video']), checkMedia: true,
+      }),
+    }),
 
     // 2200 is INSTAGRAM'S cap, and it lives here rather than in schedule.js for exactly
     // that reason — YouTube's description limit is 5000. A platform limit enforced in the
@@ -61,52 +129,23 @@ export const CONTRACTS = Object.freeze({
      * EVERY problem at once — a creator fixing one field at a time, one request at a time,
      * is a worse experience than being told all of it up front.
      */
-    validateCreate({ type, asset_keys, caption }) {
-      const problems = [];
-
-      if (!this.contentTypes.includes(type)) {
-        problems.push(`type must be one of: ${this.contentTypes.join(', ')}`);
-        // Everything below is type-specific, so stop here rather than emit cascading
-        // nonsense about an asset count for a type that does not exist.
-        return problems;
-      }
-
-      const n = Array.isArray(asset_keys) ? asset_keys.length : 0;
-      if (type === 'reel' && n !== 1) {
-        problems.push('a reel needs exactly 1 asset');
-      }
-      if (type === 'carousel' && (n < 2 || n > 10)) {
-        problems.push('a carousel needs between 2 and 10 assets');
-      }
-      if (typeof caption === 'string' && caption.length > this.captionMax) {
-        problems.push(`caption must be ${this.captionMax} characters or fewer`);
-      }
-      return problems;
-    },
+    validateCreate(input) { return validateShape(this, input); },
+    captionRequired(type) { return captionRequired(this, type); },
   }),
 
   // TikTok: one vertical video per post, published by cron-worker/platforms/tiktok.js through the Content
   // Posting API. Photo posts are not scheduled (PULL_FROM_URL needs a verified domain). `captionMax` is
   // TikTok's title cap; the per-post choices (privacy, cover, ...) are validated by shared/tiktok-options.js.
-  tt: Object.freeze({
+  tt: platform({
     id: 'tt',
     label: 'TikTok',
-    contentTypes: Object.freeze(['reel']),
+    shapes: Object.freeze({
+      reel: Object.freeze({ min: 1, max: 1, msg: 'a TikTok video needs exactly 1 asset', caption: 'optional' }),
+    }),
     captionMax: 2200,
     trial: null,
-    validateCreate({ type, asset_keys, caption }) {
-      const problems = [];
-      if (!this.contentTypes.includes(type)) {
-        problems.push(`type must be one of: ${this.contentTypes.join(', ')}`);
-        return problems;
-      }
-      const n = Array.isArray(asset_keys) ? asset_keys.length : 0;
-      if (n !== 1) problems.push('a TikTok video needs exactly 1 asset');
-      if (typeof caption === 'string' && caption.length > this.captionMax) {
-        problems.push(`caption must be ${this.captionMax} characters or fewer`);
-      }
-      return problems;
-    },
+    validateCreate(input) { return validateShape(this, input); },
+    captionRequired(type) { return captionRequired(this, type); },
   }),
 });
 

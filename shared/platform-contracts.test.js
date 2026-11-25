@@ -122,3 +122,62 @@ test('resolve: a platform with trial:null rejects a requested trial and defaults
   const r = resolveTrialStrategy(noTrial, { type: 'reel', requested: 'MANUAL' });
   assert.match(r.problems[0], /Zed.*trial/i);
 });
+
+// ── Story: a content type, declared per platform as data (not an Instagram special case) ──────────────
+import { assetKindOf } from './platform-contracts.js';
+
+test('assetKindOf: .jpg/.jpeg is an image, .mp4 a video, anything else null (Meta stories take JPEG only)', () => {
+  assert.equal(assetKindOf('u/a.jpg'), 'image');
+  assert.equal(assetKindOf('u/a.JPEG'), 'image');
+  assert.equal(assetKindOf('u/a.mp4'), 'video');
+  assert.equal(assetKindOf('u/a.png'), null);
+  assert.equal(assetKindOf('u/a'), null);
+});
+
+test('Instagram declares story among its content types; reel and carousel are unchanged', () => {
+  assert.deepEqual([...ig().contentTypes].sort(), ['carousel', 'reel', 'story']);
+});
+
+test('a story is exactly one .jpg or .mp4, with an empty caption and no cover', () => {
+  assert.deepEqual(ig().validateCreate({ type: 'story', asset_keys: ['u/a.jpg'], caption: '' }), []);
+  assert.deepEqual(ig().validateCreate({ type: 'story', asset_keys: ['u/a.mp4'], caption: '' }), []);
+  assert.match(ig().validateCreate({ type: 'story', asset_keys: ['u/a.jpg', 'u/b.jpg'], caption: '' })[0], /story needs exactly 1 asset/);
+  assert.match(ig().validateCreate({ type: 'story', asset_keys: [], caption: '' })[0], /story needs exactly 1 asset/);
+});
+
+test('a story with a caption is REJECTED explicitly, never silently dropped', () => {
+  const p = ig().validateCreate({ type: 'story', asset_keys: ['u/a.jpg'], caption: 'hello' });
+  assert.equal(p.length, 1);
+  assert.match(p[0], /story cannot have a caption/);
+});
+
+test('a story with a cover_key is rejected', () => {
+  const p = ig().validateCreate({ type: 'story', asset_keys: ['u/a.jpg'], caption: '', cover_key: 'u/c.jpg' });
+  assert.match(p.join(';'), /story cannot have a cover/);
+});
+
+test('a story asset that is not .jpg/.mp4 (a PNG) is rejected, naming the key', () => {
+  const p = ig().validateCreate({ type: 'story', asset_keys: ['u/a.png'], caption: '' });
+  assert.match(p.join(';'), /\.jpg.*\.mp4|JPEG/);
+  assert.match(p.join(';'), /a\.png/);
+});
+
+test('reel and carousel keep their exact messages and still accept any caption/cover handling as before', () => {
+  assert.match(ig().validateCreate({ type: 'reel', asset_keys: ['a', 'b'], caption: '' })[0], /a reel needs exactly 1 asset/);
+  assert.match(ig().validateCreate({ type: 'carousel', asset_keys: ['a'], caption: '' })[0], /a carousel needs between 2 and 10 assets/);
+  assert.deepEqual(ig().validateCreate({ type: 'reel', asset_keys: ['a'], caption: 'hi', cover_key: 'c' }), []);
+});
+
+test('every platform declares its content types as a shapes table, and contentTypes is derived from it (platform-agnostic)', () => {
+  for (const id of supportedPlatforms()) {
+    const c = contractFor(id);
+    assert.deepEqual([...c.contentTypes].sort(), Object.keys(c.shapes).sort(), id);
+  }
+});
+
+test('captionRequired: reel/carousel yes, story no, TikTok no', () => {
+  assert.equal(contractFor('ig').captionRequired('reel'), true);
+  assert.equal(contractFor('ig').captionRequired('carousel'), true);
+  assert.equal(contractFor('ig').captionRequired('story'), false);
+  assert.equal(contractFor('tt').captionRequired('reel'), false);
+});

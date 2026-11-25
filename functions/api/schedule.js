@@ -1,5 +1,7 @@
 import { requireUserAuth } from './_auth.js';
 import { DEFAULT_PLATFORM, contractFor, resolveTrialStrategy, canonicalPlatform } from '../../shared/platform-contracts.js';
+import { judgeFile } from '../../shared/media-specs.js';
+import { assetKindOf } from '../../shared/platform-contracts.js';
 import { resolveTikTokOptions, flattenTikTok, TIKTOK_FIELDS } from '../../shared/tiktok-options.js';
 
 const CORS = {
@@ -47,7 +49,6 @@ export async function onRequest(context) {
     const platform = canonicalPlatform(body.platform ?? DEFAULT_PLATFORM);
     // A TikTok post is always one video, so `type` may be left out; its caption may be too (the title is used).
     const type = body.type ?? (platform === 'tt' ? 'reel' : undefined);
-    const caption = body.caption ?? (platform === 'tt' ? (typeof body.title === 'string' ? body.title : '') : undefined);
     let contract;
     try {
       contract = contractFor(platform);
@@ -56,10 +57,16 @@ export async function onRequest(context) {
       // silent fallback to Instagram, which would publish to the wrong network entirely.
       return json({ ok: false, error: err.message }, 400);
     }
+    // Whether a caption is mandatory is a fact about the platform's content type (a story has none, TikTok falls back to its title),
+    // so it comes from the contract, not from a platform check here.
+    const captionNeeded = contract.captionRequired(type);
+    const caption = body.caption ?? (platform === 'tt' ? (typeof body.title === 'string' ? body.title : '') : (captionNeeded ? undefined : ''));
 
-    if (!id || !type || !Array.isArray(asset_keys) || asset_keys.length === 0 || (!caption && platform !== 'tt') || !post_at) {
+    if (!id || !type || !Array.isArray(asset_keys) || asset_keys.length === 0 || (!caption && captionNeeded) || !post_at) {
       return json(
-        { ok: false, error: 'id, type, asset_keys (non-empty), caption and post_at are required' },
+        { ok: false, error: captionNeeded
+          ? 'id, type, asset_keys (non-empty), caption and post_at are required'
+          : 'id, type, asset_keys (non-empty) and post_at are required' },
         400
       );
     }
@@ -71,7 +78,7 @@ export async function onRequest(context) {
     // asset counts, and the caption cap are all facts about Instagram specifically
     // (2200 chars is Meta's limit; YouTube's is 5000). Keeping them in this generic
     // handler is what would make it silently wrong for platform two.
-    const problems = contract.validateCreate({ type, asset_keys, caption });
+    const problems = contract.validateCreate({ type, asset_keys, caption, cover_key });
     // Trial strategy: validated HERE, when the row is created. No client value means NOT a trial
     // (NULL); only an explicit, valid value makes the cron send trial_params.
     const trial = resolveTrialStrategy(contract, { type, requested: body.trial_strategy });
@@ -82,6 +89,28 @@ export async function onRequest(context) {
     const tikTok = platform === 'tt' ? resolveTikTokOptions(body) : null;
     if (tikTok) problems.push(...tikTok.problems);
     else if (tikTokGiven.length) problems.push(`${tikTokGiven.join(', ')} only apply to TikTok posts`);
+    // Media facts (width/height/duration/bytes) the client MAY send for content types that judge them (a story): hard limits are
+    // problems, an advisory aspect is a warning returned beside the id. Without them, the aspect tagged on the asset at upload
+    // time (assets.aspect) still yields the warning. Never blocks a create on a failed lookup.
+    const warnings = [];
+    const shape = contract.shapes[type];
+    if (shape?.checkMedia && problems.length === 0) {
+      const m = body.media && typeof body.media === 'object' && !Array.isArray(body.media) ? body.media : null;
+      const kind = assetKindOf(asset_keys[0]);
+      if (m) {
+        const j = judgeFile(platform, type, { kind, width: m.width, height: m.height, durationSec: m.duration_sec, bytes: m.bytes });
+        problems.push(...j.problems);
+        warnings.push(...j.warnings);
+      } else {
+        try {
+          const row = await env.DB.prepare(`SELECT aspect FROM assets WHERE key = ?`).bind(asset_keys[0]).first();
+          const [w, h] = String(row?.aspect || '').split(':').map(Number);
+          if (w > 0 && h > 0) warnings.push(...judgeFile(platform, type, { kind, width: w, height: h }).warnings);
+        } catch (err) {
+          console.error('D1 select error (assets aspect):', { message: err?.message });
+        }
+      }
+    }
     if (problems.length) {
       // Every problem at once — a creator fixing one field per request is a worse
       // experience than being told all of it up front.
@@ -160,7 +189,7 @@ export async function onRequest(context) {
       return json({ ok: false, error: 'Could not save scheduled post' }, 500);
     }
 
-    return json({ ok: true, id, post_at });
+    return json({ ok: true, id, post_at, ...(warnings.length ? { warnings } : {}) });
   }
 
   // ── GET — list scheduled posts for the authenticated user ────────────────
