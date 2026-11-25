@@ -13,12 +13,11 @@
 -- Same shape as 0016's rebuild: explicit column lists on both sides, then the due-query index recreated (a DROP TABLE takes its
 -- indexes with it). Column set = the live table as of 0024 (queried from remote D1 2026-11-25).
 --
--- DEPLOY NOTE: rewrites a LIVE table the cron reads every 60 s. It is small and runs in a transaction; a cron tick landing
+-- DEPLOY NOTE: rewrites a LIVE table the cron reads every 60 s. It is small and D1 applies it atomically; a cron tick landing
 -- mid-migration sees the pre-migration table and finds nothing due. Take the export above first.
 
-PRAGMA foreign_keys=OFF;
-
-BEGIN TRANSACTION;
+-- No BEGIN/COMMIT or PRAGMA: Cloudflare D1 rejects BEGIN TRANSACTION in a file (0016 predates that) and runs a file's statements
+-- as one atomic batch itself. Nothing references scheduled_posts by foreign key, so foreign_keys needs no toggling.
 
 CREATE TABLE scheduled_posts_new (
   id TEXT PRIMARY KEY,
@@ -59,6 +58,3 @@ ALTER TABLE scheduled_posts_new RENAME TO scheduled_posts;
 CREATE INDEX IF NOT EXISTS idx_scheduled_posts_post_at
   ON scheduled_posts(post_at, status);
 
-COMMIT;
-
-PRAGMA foreign_keys=ON;
