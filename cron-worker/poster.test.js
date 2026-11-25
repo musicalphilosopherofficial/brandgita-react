@@ -944,3 +944,32 @@ test('story with zero assets throws before any Graph call (retried as transient,
   assert.equal(calls.length, 0);
   assert.match(state.posts['post-1'].error, /Story has no asset keys/);
 });
+
+test('story with user_tags sends them as a JSON array on the container; without them the param is absent', async () => {
+  const tags = [{ username: 'kevin', x: 0.5, y: 0.8 }, { username: 'rock' }];
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify(['pic.jpg']), user_tags: JSON.stringify(tags) }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  storyFetchMocks({ onCreate: (u, body) => assert.deepEqual(JSON.parse(body.get('user_tags')), tags) });
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.equal(state.posts['post-1'].status, 'posted');
+
+  const plain = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify(['pic.jpg']), user_tags: null }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  storyFetchMocks({ onCreate: (u, body) => assert.equal(body.get('user_tags'), null) });
+  await processPost(plain.env, plain.state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.equal(plain.state.posts['post-1'].status, 'posted');
+});
+
+test('story with malformed stored user_tags still posts, without tags (a tag must never block the story)', async () => {
+  const { env, state } = makeEnv({
+    posts: { 'post-1': post({ type: 'story', caption: '', asset_keys: JSON.stringify(['pic.jpg']), user_tags: '{not json' }) },
+    tokens: { 'ig-user-1': tokenRow() },
+  });
+  storyFetchMocks({ onCreate: (u, body) => assert.equal(body.get('user_tags'), null) });
+  await processPost(env, state.posts['post-1'], MEDIA_BASE, instantSleep);
+  assert.equal(state.posts['post-1'].status, 'posted');
+});

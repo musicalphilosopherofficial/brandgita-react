@@ -217,6 +217,16 @@ async function postStory(post, assetKeys, accessToken, deps) {
   const key = assetKeys[0];
   const url = mediaUrl(key, deps.mediaBase);
   const params = { media_type: 'STORIES', ...(/\.mp4$/i.test(key) ? { video_url: url } : { image_url: url }) };
+  // user_tags (mentions) are the one story parameter Meta supports beyond the media. Stored as validated JSON; an unreadable
+  // value is skipped — a tag must never be the reason a story does not post.
+  if (post.user_tags) {
+    try {
+      const tags = JSON.parse(post.user_tags);
+      if (Array.isArray(tags) && tags.length) params.user_tags = JSON.stringify(tags);
+    } catch {
+      console.error(`Story ${post.id}: ignoring unreadable user_tags`);
+    }
+  }
 
   const createRes = await igPost(`${igUserId}/media`, params, accessToken);
   const creationId = createRes.id;

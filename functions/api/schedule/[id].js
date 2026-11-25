@@ -1,6 +1,7 @@
 import { requireUserAuth } from '../_auth.js';
-import { contractFor, resolveTrialStrategy } from '../../../shared/platform-contracts.js';
+import { contractFor, resolveTrialStrategy, userTagTypes } from '../../../shared/platform-contracts.js';
 import { deleteUnreferencedMedia } from '../../../shared/media-refs.js';
+import { validateUserTags } from '../../../shared/user-tags.js';
 import { resolveTikTokOptions, TIKTOK_FIELDS } from '../../../shared/tiktok-options.js';
 
 const CORS = {
@@ -125,7 +126,7 @@ export async function onRequest(context) {
 // AFTER the row update succeeds, so a failed update never strands a post without its media. id, type, platform and the owner
 // stay fixed. See PATCH_SCHEDULE_SPEC.md.
 // The TikTok fields (privacy_level, title, ...) are patchable on TikTok posts only.
-const PATCHABLE = new Set(['post_at', 'caption', 'cover_key', 'asset_keys', 'trial_strategy', ...TIKTOK_FIELDS]);
+const PATCHABLE = new Set(['post_at', 'caption', 'cover_key', 'asset_keys', 'trial_strategy', 'user_tags', ...TIKTOK_FIELDS]);
 
 async function handlePatch(context) {
   const { request, env, params } = context;
@@ -191,7 +192,7 @@ async function handlePatch(context) {
   let post;
   try {
     post = await env.DB.prepare(
-      `SELECT id, ig_user_id, status, caption, post_at, platform, type, asset_keys, cover_key, trial_strategy, tiktok_options FROM scheduled_posts WHERE id = ?`
+      `SELECT id, ig_user_id, status, caption, post_at, platform, type, asset_keys, cover_key, trial_strategy, tiktok_options, user_tags FROM scheduled_posts WHERE id = ?`
     )
       .bind(id)
       .first();
@@ -263,6 +264,21 @@ async function handlePatch(context) {
     if (tikTok.problems.length) return json({ ok: false, error: tikTok.problems.join('; ') }, 400);
   }
 
+  // user_tags: set, replace, or clear (null) on a post whose content type accepts them (a story). Refused elsewhere.
+  let userTags; // undefined = untouched
+  if (body.user_tags !== undefined) {
+    if (body.user_tags === null) {
+      userTags = null;
+    } else if (contract.shapes[post.type]?.userTags) {
+      const ut = validateUserTags(body.user_tags);
+      if (ut.problems.length) return json({ ok: false, error: ut.problems.join('; ') }, 400);
+      userTags = ut.tags;
+    } else {
+      const ok = userTagTypes(contract);
+      return json({ ok: false, error: ok.length ? `user_tags only apply to: ${ok.join(', ')} (this post is a ${post.type})` : `${contract.label || contract.id} does not support user_tags` }, 400);
+    }
+  }
+
   // New keys: the caller's account only (the cron serves them as public URLs), and already uploaded.
   const newKeys = [...(asset_keys || []), ...(cover_key !== undefined ? [cover_key] : [])];
   const prefix = `${ig_user_id}/`;
@@ -291,6 +307,7 @@ async function handlePatch(context) {
   if (cover_key !== undefined) { sets.push('cover_key = ?'); binds.push(cover_key); }
   if (asset_keys !== undefined) { sets.push('asset_keys = ?'); binds.push(JSON.stringify(asset_keys)); }
   if (trial_strategy !== undefined) { sets.push('trial_strategy = ?'); binds.push(trial_strategy); }
+  if (userTags !== undefined) { sets.push('user_tags = ?'); binds.push(userTags ? JSON.stringify(userTags) : null); }
   if (tikTok) { sets.push('tiktok_options = ?'); binds.push(JSON.stringify(tikTok.options)); }
 
   try {
@@ -319,6 +336,11 @@ async function handlePatch(context) {
     asset_keys: effective.asset_keys,
     trial_strategy: trial_strategy !== undefined ? trial_strategy : post.trial_strategy ?? null,
   };
+  if (userTags !== undefined) {
+    out.user_tags = userTags;
+  } else if (post.user_tags) {
+    try { out.user_tags = JSON.parse(post.user_tags); } catch { /* unreadable stored tags are simply not echoed */ }
+  }
   if (post.platform === 'tt') {
     let stored = null;
     try { stored = tikTok ? tikTok.options : (post.tiktok_options ? JSON.parse(post.tiktok_options) : null); } catch { stored = null; }

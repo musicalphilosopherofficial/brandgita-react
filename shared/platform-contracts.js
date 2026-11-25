@@ -45,6 +45,7 @@ export function assetKindOf(key) {
  *   cover       false = a cover_key is rejected
  *   assetKinds  allowed kinds from assetKindOf (['image','video']); omitted = not checked
  *   checkMedia  true = the optional width/height/duration facts are judged against MEDIA_SPECS (judgeFile)
+ *   userTags    true = the type may mention users (shared/user-tags.js); any other type refuses user_tags
  * Adding Facebook Stories (or any platform's story) is a new `shapes` entry, not new validation code.
  */
 function validateShape(contract, { type, asset_keys, caption, cover_key } = {}) {
@@ -78,6 +79,11 @@ function validateShape(contract, { type, asset_keys, caption, cover_key } = {}) 
   return problems;
 }
 
+/** Content types of this contract that accept user_tags (for messages). */
+export function userTagTypes(contract) {
+  return Object.keys(contract.shapes).filter((t) => contract.shapes[t].userTags);
+}
+
 /** Is a caption mandatory for this content type on this contract? (Unknown type: true, so the type error is what the creator sees.) */
 function captionRequired(contract, type) {
   const c = contract.shapes[type]?.caption;
@@ -98,7 +104,7 @@ export const CONTRACTS = Object.freeze({
       // no cover, expires after 24h. Aspect/duration/size are judged by media-specs.js (9:16 is advisory: letterboxed, not refused).
       story: Object.freeze({
         min: 1, max: 1, msg: 'a story needs exactly 1 asset',
-        caption: 'none', cover: false, assetKinds: Object.freeze(['image', 'video']), checkMedia: true,
+        caption: 'none', cover: false, assetKinds: Object.freeze(['image', 'video']), checkMedia: true, userTags: true,
       }),
     }),
 

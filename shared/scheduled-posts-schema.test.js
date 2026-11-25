@@ -30,17 +30,17 @@ test('the rebuild lost nothing: every column and the due-query index survive', (
   const cols = d.prepare(`SELECT name FROM pragma_table_info('scheduled_posts')`).all().map((r) => r.name);
   for (const c of ['id', 'ig_user_id', 'type', 'asset_keys', 'cover_key', 'caption', 'post_at', 'status', 'permalink', 'error',
     'retry_count', 'created_at', 'platform', 'held_at', 'ig_media_id', 'media_purged_at', 'posting_since', 'trial_strategy',
-    'tiktok_options', 'tt_publish_id']) assert.ok(cols.includes(c), `column ${c}`);
+    'tiktok_options', 'tt_publish_id', 'user_tags']) assert.ok(cols.includes(c), `column ${c}`);
   assert.ok(d.prepare(`SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_scheduled_posts_post_at'`).get());
 });
 
 test('the rebuild preserves existing rows', () => {
   const d = new DatabaseSync(':memory:');
   const files = fs.readdirSync(MIGRATIONS).filter((n) => n.endsWith('.sql')).sort();
-  const last = files.at(-1);
-  for (const f of files.slice(0, -1)) { try { d.exec(fs.readFileSync(new URL(f, MIGRATIONS), 'utf8')); } catch (e) { if (!/waitlist/.test(e.message)) throw e; } }
+  const last = files.find((f) => f.startsWith('0025_'));
+  for (const f of files.filter((x) => x < last)) { try { d.exec(fs.readFileSync(new URL(f, MIGRATIONS), 'utf8')); } catch (e) { if (!/waitlist/.test(e.message)) throw e; } }
   d.prepare(`INSERT INTO scheduled_posts (id, ig_user_id, type, asset_keys, post_at, caption, status, tt_publish_id) VALUES ('keep','u','reel','["x"]','2030-01-01T00:00:00Z','cap','posted','pub1')`).run();
-  assert.match(last, /^0025_/, 'the story migration must be the newest');
+  assert.ok(last, 'the type-CHECK rebuild migration (0025) must exist');
   d.exec(fs.readFileSync(new URL(last, MIGRATIONS), 'utf8'));
   const row = d.prepare(`SELECT * FROM scheduled_posts WHERE id='keep'`).get();
   assert.deepEqual([row.caption, row.status, row.tt_publish_id, row.type], ['cap', 'posted', 'pub1', 'reel']);

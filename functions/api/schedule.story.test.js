@@ -123,3 +123,39 @@ test('PATCH on a story cannot add a caption', async () => {
   assert.equal(res.status, 400);
   assert.match((await res.json()).error, /story cannot have a caption/);
 });
+
+// ── user_tags (the only story parameter Meta supports beyond the media itself) ──
+test('a story with user_tags is created and the tags are stored as normalised JSON', async () => {
+  const { res, inserts } = await create({ user_tags: [{ username: '@kevin', x: 0.5, y: 0.8 }, { username: 'rock' }] });
+  assert.equal(res.status, 200);
+  const stored = inserts[0].args.find((a) => typeof a === 'string' && a.includes('kevin'));
+  assert.deepEqual(JSON.parse(stored), [{ username: 'kevin', x: 0.5, y: 0.8 }, { username: 'rock' }]);
+});
+
+test('a story with no user_tags stores NULL, not "[]"', async () => {
+  const { inserts } = await create();
+  assert.ok(!inserts[0].args.includes('[]'));
+});
+
+test('bad user_tags are a 400 naming the entry', async () => {
+  const { res, data } = await create({ user_tags: [{ username: 'ok' }, { username: 'bad name' }] });
+  assert.equal(res.status, 400);
+  assert.match(data.error, /user_tags\[1\]/);
+});
+
+test('user_tags on a reel is refused (never silently dropped) and names what supports it', async () => {
+  const { res, data } = await create({ type: 'reel', asset_keys: [`${OWNER}/a.mp4`], caption: 'hi', user_tags: [{ username: 'a' }] });
+  assert.equal(res.status, 400);
+  assert.match(data.error, /user_tags.*story/);
+});
+
+test('PATCH can set user_tags on a scheduled story, and clear them with null', async () => {
+  const post = { id: 's1', ig_user_id: OWNER, status: 'scheduled', caption: '', post_at: futureISO(), platform: 'ig', type: 'story', asset_keys: JSON.stringify([`${OWNER}/a.jpg`]), cover_key: null, user_tags: null };
+  const { env } = makeEnv({ post });
+  const res = await scheduleId({ request: req('PATCH', { user_tags: [{ username: 'x1' }] }), env, params: { id: 's1' } });
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).user_tags, [{ username: 'x1' }]);
+  const cleared = await scheduleId({ request: req('PATCH', { user_tags: null }), env: makeEnv({ post }).env, params: { id: 's1' } });
+  assert.equal(cleared.status, 200);
+  assert.equal((await cleared.json()).user_tags, null);
+});
