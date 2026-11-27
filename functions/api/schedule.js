@@ -2,7 +2,7 @@ import { requireUserAuth } from './_auth.js';
 import { DEFAULT_PLATFORM, contractFor, resolveTrialStrategy, canonicalPlatform } from '../../shared/platform-contracts.js';
 import { validateUserTags } from '../../shared/user-tags.js';
 import { judgeFile } from '../../shared/media-specs.js';
-import { assetKindOf, userTagTypes } from '../../shared/platform-contracts.js';
+import { assetKindOf, userTagTypes, resolveCollaborators } from '../../shared/platform-contracts.js';
 import { resolveTikTokOptions, flattenTikTok, TIKTOK_FIELDS } from '../../shared/tiktok-options.js';
 
 const CORS = {
@@ -103,6 +103,9 @@ export async function onRequest(context) {
       }
     }
 
+    const collab = resolveCollaborators(contract, type, body.collaborators);
+    problems.push(...collab.problems);
+
     // Media facts (width/height/duration/bytes) the client MAY send for content types that judge them (a story): hard limits are
     // problems, an advisory aspect is a warning returned beside the id. Without them, the aspect tagged on the asset at upload
     // time (assets.aspect) still yields the warning. Never blocks a create on a failed lookup.
@@ -177,8 +180,8 @@ export async function onRequest(context) {
     try {
       await env.DB.prepare(
         `INSERT INTO scheduled_posts
-           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at, trial_strategy, tiktok_options, user_tags)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?, ?, ?, ?)`
+           (id, ig_user_id, platform, type, asset_keys, cover_key, caption, post_at, status, permalink, error, retry_count, created_at, trial_strategy, tiktok_options, user_tags, collaborators)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, 0, ?, ?, ?, ?, ?)`
       )
         .bind(
           id,
@@ -192,7 +195,8 @@ export async function onRequest(context) {
           now,
           trial.strategy,
           tikTok ? JSON.stringify(tikTok.options) : null,
-          userTags ? JSON.stringify(userTags) : null
+          userTags ? JSON.stringify(userTags) : null,
+          collab.usernames ? JSON.stringify(collab.usernames) : null
         )
         .run();
     } catch (err) {
@@ -221,14 +225,15 @@ export async function onRequest(context) {
     let rows;
     try {
       const result = await env.DB.prepare(
-        `SELECT id, platform, type, post_at, status, permalink, error, retry_count, caption, trial_strategy, tiktok_options, user_tags
+        `SELECT id, platform, type, post_at, status, permalink, error, retry_count, caption, trial_strategy, tiktok_options, user_tags, collaborators
          FROM scheduled_posts
          WHERE ${where.join(' AND ')}
          ORDER BY post_at ASC`
       )
         .bind(...binds)
         .all();
-      rows = result.results.map(flattenTikTok).map((r) => { if (!r.user_tags) return r; try { return { ...r, user_tags: JSON.parse(r.user_tags) }; } catch { return { ...r, user_tags: null }; } });
+      const parseList = (v) => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
+      rows = result.results.map((r) => ('collaborators' in r ? { ...r, collaborators: parseList(r.collaborators) } : r)).map(flattenTikTok).map((r) => { if (!r.user_tags) return r; try { return { ...r, user_tags: JSON.parse(r.user_tags) }; } catch { return { ...r, user_tags: null }; } });
     } catch (err) {
       console.error('D1 select error (scheduled_posts):', err);
       return json({ ok: false, error: 'Could not fetch scheduled posts' }, 500);

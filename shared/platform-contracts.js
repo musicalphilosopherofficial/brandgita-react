@@ -27,6 +27,7 @@ export const DEFAULT_PLATFORM = 'ig';
 // Clients say "tiktok"/"instagram"; the registry, the `platform` column, the adapter key and every log line
 // say 'tt'/'ig'. One canonical id through every layer (see the header) — the alias is mapped at the edge.
 export { canonicalPlatform } from './media-specs.js';
+import { validateCollaborators } from './collaborators.js';
 
 /** 'image' | 'video' | null from the R2 key's extension. The desktop uploader writes .jpg for an image and .mp4 for a
  *  video (the carousel path already branches on this); Meta's story images are JPEG only. */
@@ -45,6 +46,7 @@ export function assetKindOf(key) {
  *   cover       false = a cover_key is rejected
  *   assetKinds  allowed kinds from assetKindOf (['image','video']); omitted = not checked
  *   checkMedia  true = the optional width/height/duration facts are judged against MEDIA_SPECS (judgeFile)
+ *   collaborators true = the type may invite collaborators (shared/collaborators.js)
  *   userTags    true = the type may mention users (shared/user-tags.js); any other type refuses user_tags
  * Adding Facebook Stories (or any platform's story) is a new `shapes` entry, not new validation code.
  */
@@ -79,6 +81,19 @@ function validateShape(contract, { type, asset_keys, caption, cover_key } = {}) 
   return problems;
 }
 
+/**
+ * Judge a request's `collaborators` for one content type: {usernames, problems}. One rule for create and patch.
+ * null/[] always means "none" and is allowed anywhere (it is how a PATCH removes them).
+ */
+export function resolveCollaborators(contract, type, input) {
+  if (input === undefined || input === null || (Array.isArray(input) && input.length === 0)) return { usernames: null, problems: [] };
+  if (!contract.shapes[type]?.collaborators) {
+    const ok = Object.keys(contract.shapes).filter((t) => contract.shapes[t].collaborators);
+    return { usernames: null, problems: [ok.length ? `collaborators only apply to: ${ok.join(', ')} (this post is a ${type})` : `${contract.label || contract.id} does not support collaborators`] };
+  }
+  return validateCollaborators(input);
+}
+
 /** Content types of this contract that accept user_tags (for messages). */
 export function userTagTypes(contract) {
   return Object.keys(contract.shapes).filter((t) => contract.shapes[t].userTags);
@@ -98,8 +113,8 @@ export const CONTRACTS = Object.freeze({
     id: 'ig',
     label: 'Instagram',
     shapes: Object.freeze({
-      reel: Object.freeze({ min: 1, max: 1, msg: 'a reel needs exactly 1 asset' }),
-      carousel: Object.freeze({ min: 2, max: 10, msg: 'a carousel needs between 2 and 10 assets' }),
+      reel: Object.freeze({ min: 1, max: 1, msg: 'a reel needs exactly 1 asset', collaborators: true }),
+      carousel: Object.freeze({ min: 2, max: 10, msg: 'a carousel needs between 2 and 10 assets', collaborators: true }),
       // Story (Meta Content Publishing, media_type=STORIES): ONE JPEG image or MP4 video, no caption (Instagram ignores it),
       // no cover, expires after 24h. Aspect/duration/size are judged by media-specs.js (9:16 is advisory: letterboxed, not refused).
       story: Object.freeze({

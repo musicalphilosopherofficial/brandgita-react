@@ -44,10 +44,12 @@ const GRAPH_BASE = IG_GRAPH_BASE;
 
 // Custom error that carries the Meta error code so the caller can detect 190.
 class IgApiError extends Error {
-  constructor(message, code) {
+  constructor(message, code, { httpStatus, transient } = {}) {
     super(message);
     this.name = 'IgApiError';
     this.igCode = code; // numeric Meta error code, or undefined
+    this.httpStatus = httpStatus;
+    this.transient = transient === true; // Meta's own is_transient flag
   }
 }
 
@@ -79,7 +81,7 @@ async function igPost(path, params, accessToken) {
     const code = data?.error?.code;
     const msg = data?.error?.message || `IG POST ${path} failed (HTTP ${res.status})`;
     console.error(`IG POST ${path} error:`, data);
-    throw new IgApiError(msg, code);
+    throw new IgApiError(msg, code, { httpStatus: res.status, transient: data?.error?.is_transient });
   }
   return data;
 }
@@ -170,6 +172,44 @@ async function publishAndGetPermalink(igUserId, creationId, accessToken, deps = 
   return fetchPermalink(mediaId, accessToken, deps);
 }
 
+// ── Collaborators ─────────────────────────────────────────────────────────────────────────────────────────────
+// The rule: a post that has collaborators is NEVER published without them. Meta documents no error for a refused invite, so a
+// refusal is recognised narrowly — "invalid parameter" (100), "invalid user id" (110) or a message naming collaborators, and not
+// flagged transient, not a 5xx. Anything else (rate limit, media download fault, outage) retries as usual, still WITH them.
+// NOT covered: if Instagram silently ignores the parameter, nothing here can see it (invite status is Facebook Login only).
+const REFUSAL_CODES = new Set([100, 110]);
+
+function collaboratorsOf(post) {
+  if (!post.collaborators) return null;
+  let list = null;
+  try { list = JSON.parse(post.collaborators); } catch { /* handled below */ }
+  if (!Array.isArray(list)) {
+    const err = new IgApiError('The saved collaborators could not be read, so nothing was posted. Set them again and reschedule.');
+    err.permanent = true;
+    throw err;
+  }
+  return list.length ? list : null;
+}
+
+// Create the container that carries the invites (a reel, or a carousel PARENT).
+async function createWithCollaborators(path, params, accessToken, collaborators) {
+  if (!collaborators) return igPost(path, params, accessToken);
+  try {
+    return await igPost(path, { ...params, collaborators: JSON.stringify(collaborators) }, accessToken);
+  } catch (err) {
+    const refused = err.httpStatus >= 400 && err.httpStatus < 500 && !err.transient
+      && (REFUSAL_CODES.has(err.igCode) || /collaborat/i.test(err.message));
+    if (!refused) throw err;
+    const names = collaborators.map((u) => `@${u}`).join(', ');
+    const plain = new IgApiError(
+      `Instagram would not accept this post with collaborators ${names}. Nothing was posted. Check the usernames, or remove them, and schedule it again. Instagram said: ${err.message}`,
+      err.igCode,
+    );
+    plain.permanent = true;
+    throw plain;
+  }
+}
+
 // REEL: create container -> poll -> publish -> permalink.
 async function postReel(post, assetKeys, accessToken, deps) {
   const igUserId = post.ig_user_id;
@@ -183,6 +223,7 @@ async function postReel(post, assetKeys, accessToken, deps) {
     video_url: mediaUrl(assetKeys[0], deps.mediaBase),
     caption: post.caption || '',
   };
+  const collaborators = collaboratorsOf(post);
   // cover_url is optional — only include when a cover_key exists.
   if (post.cover_key) {
     params.cover_url = mediaUrl(post.cover_key, deps.mediaBase);
@@ -193,7 +234,7 @@ async function postReel(post, assetKeys, accessToken, deps) {
     params.trial_params = JSON.stringify({ graduation_strategy: post.trial_strategy });
   }
 
-  const createRes = await igPost(`${igUserId}/media`, params, accessToken);
+  const createRes = await createWithCollaborators(`${igUserId}/media`, params, accessToken, collaborators);
   const creationId = createRes.id;
   if (!creationId) {
     throw new IgApiError('Reel container creation returned no id');
@@ -255,6 +296,9 @@ async function postCarousel(post, assetKeys, accessToken, deps) {
     throw new IgApiError('Carousel requires at least 2 items');
   }
 
+  // Read before any child is uploaded, so an unreadable list fails without touching Instagram. Invites go on the PARENT only.
+  const collaborators = collaboratorsOf(post);
+
   // 1. Create a child container for each item, branching on the key extension.
   const childIds = [];
   for (const key of assetKeys) {
@@ -287,14 +331,15 @@ async function postCarousel(post, assetKeys, accessToken, deps) {
   }
 
   // 2. Create the parent carousel container referencing all children.
-  const carouselRes = await igPost(
+  const carouselRes = await createWithCollaborators(
     `${igUserId}/media`,
     {
       media_type: 'CAROUSEL',
       children: childIds.join(','),
       caption: post.caption || '',
     },
-    accessToken
+    accessToken,
+    collaborators
   );
   const carouselId = carouselRes.id;
   if (!carouselId) {

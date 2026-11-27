@@ -12,7 +12,7 @@
  */
 export const MAX_USER_TAGS = 20;
 
-const USERNAME = /^[A-Za-z0-9._]{1,30}$/;
+export const USERNAME = /^[A-Za-z0-9._]{1,30}$/;
 const inUnit = (n) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1;
 
 /** @returns {{tags: object[]|null, problems: string[]}} tags is the normalised list, or null when there are none. */

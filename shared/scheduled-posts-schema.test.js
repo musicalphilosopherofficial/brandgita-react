@@ -30,7 +30,7 @@ test('the rebuild lost nothing: every column and the due-query index survive', (
   const cols = d.prepare(`SELECT name FROM pragma_table_info('scheduled_posts')`).all().map((r) => r.name);
   for (const c of ['id', 'ig_user_id', 'type', 'asset_keys', 'cover_key', 'caption', 'post_at', 'status', 'permalink', 'error',
     'retry_count', 'created_at', 'platform', 'held_at', 'ig_media_id', 'media_purged_at', 'posting_since', 'trial_strategy',
-    'tiktok_options', 'tt_publish_id', 'user_tags']) assert.ok(cols.includes(c), `column ${c}`);
+    'tiktok_options', 'tt_publish_id', 'user_tags', 'collaborators']) assert.ok(cols.includes(c), `column ${c}`);
   assert.ok(d.prepare(`SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_scheduled_posts_post_at'`).get());
 });
 
